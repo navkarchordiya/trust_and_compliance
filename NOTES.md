@@ -42,6 +42,21 @@ What we tried, what works, and what comes next. (The guide: "They are the heart 
   - CXO lists contain junk self-reported titles ("reus zxz, Ceo" at Delhivery, 0 connections).
     Real executives had 850+ connections; CXOs below `min_connections = 50` are skipped.
   - `basic_info.status` ("active") is on the record and is now used as a fact.
+- 12:25 Live hard cases:
+  - Lookalike ("Blue Dart Express" + delhivery.com): HOLD_FOR_REVIEW, name mismatch flagged. Correct.
+  - Shakti Bhog Foods (real company, CMD arrested, ED case) first came back FRONT_SUSPECTED. Wrong.
+    Causes and fixes:
+    - Name-only Identify returns 25 candidates all at confidence 0.6 (incl. "Tyson Foods"), so the
+      score means nothing. Now only candidates with every distinctive word of the name count, and
+      records sharing one website are one business (we take the one with the most staff).
+    - Adverse news counted as a front signal. Now: front signals (fake business) and adverse news
+      (real but risky) are separate. Adverse news sends the vendor to a person; it never makes a front.
+    - Web Fetch returned `success: true` for a CloudFront 403, a bot-check page and a Google redirect
+      page. The old code read those as the article and "cleared" a namesake. Now a block or redirect
+      page, or a page that does not even contain the person's name, is "cannot verify", never a clearance.
+    - News search now uses the distinctive name ("Shakti Bhog", not "Shakti Bhog Food").
+  - Not found yet: a named shell company with a website in news after 1 Sep 2026; GST-fraud reports
+    rarely name the shell firms.
 
 ## Next
 

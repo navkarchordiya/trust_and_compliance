@@ -66,10 +66,14 @@ def render_text(r: dict) -> str:
     for p in r.get("is_trading") or []:
         add(f"  + {p}")
     lo = r.get("looks_off") or {}
-    if lo.get("strong") or lo.get("weak"):
+    if any(lo.get(k) for k in ("strong", "adverse_news", "needs_review", "weak")):
         add("\nLooks off:")
         for s in lo.get("strong", []):
+            add(f"  !! front signal: {s}")
+        for s in lo.get("adverse_news", []):
             add(f"  !! {s}")
+        for s in lo.get("needs_review", []):
+            add(f"  !  {s}")
         for s in lo.get("weak", []):
             add(f"  !  {s}")
     if r.get("namesakes_cleared"):

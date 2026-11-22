@@ -11,6 +11,25 @@ def core_name(name: str | None) -> str:
     return " ".join(w for w in words if w not in SUFFIXES)
 
 
+GENERIC = {"food", "foods", "logistics", "logistic", "services", "service", "solutions", "industries",
+           "enterprises", "enterprise", "traders", "trading", "group", "international", "global",
+           "express", "transport", "transports", "carriers", "carrier", "cargo", "freight", "supply",
+           "chain", "technologies", "technology", "tech", "ventures", "holdings", "exports", "imports",
+           "and", "of"}
+
+
+def distinctive_tokens(name: str | None) -> set[str]:
+    return {w for w in core_name(name).split() if w not in GENERIC and len(w) > 1}
+
+
+def names_same_business(requested: str | None, candidate: str | None) -> bool:
+    """Every distinctive word of the requested name appears in the candidate's name.
+    'Shakti Bhog Foods Limited' matches 'Shakti Bhog Food' but not 'Hari Bhog Foods' or 'Shakti Foods'."""
+    want = distinctive_tokens(requested)
+    have = set(core_name(candidate).split())
+    return bool(want) and want <= have
+
+
 def similarity(a: str | None, b: str | None) -> float:
     a, b = core_name(a), core_name(b)
     if not a or not b:
@@ -45,3 +64,24 @@ def parse_free_text(text: str) -> dict:
         if n:
             name = n.group(1).strip()
     return {"name": name, "website": website}
+
+
+def search_name(name: str | None) -> str:
+    """Name to search the news with: legal suffixes dropped, and trailing generic words dropped
+    while at least two words remain ('Shakti Bhog Food' -> 'Shakti Bhog', 'Acme Freight' stays)."""
+    words = [w for w in re.sub(r"[^A-Za-z0-9& ]+", " ", name or "").split() if w.lower() not in SUFFIXES]
+    while len(words) > 2 and words[-1].lower() in GENERIC:
+        words.pop()
+    return " ".join(words) or (name or "")
+
+
+def mentions_business(name: str | None, text: str | None) -> bool:
+    """Every word of the search name appears as a word in the text."""
+    want = set(core_name(search_name(name)).split())
+    return bool(want) and want <= set(core_name(text).split())
+
+
+def headcount_rank(employee_count_range: str | None) -> int:
+    """'201-500' -> 500, '10001+' -> 10001, None -> 0."""
+    nums = re.findall(r"\d+", employee_count_range or "")
+    return int(nums[-1]) if nums else 0

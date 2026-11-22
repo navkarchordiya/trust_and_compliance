@@ -148,6 +148,17 @@ class TestVerdicts(Base):
         self.assertEqual(r["verdict"], "REAL_AND_TRADING", r)
         self.assertTrue(r["namesakes_cleared"])
 
+    def test_blocked_article_is_not_a_namesake_clearance(self):
+        """Seen live: Web Fetch returned success=true with a CloudFront 403 page."""
+        news = [{"subject": "Ravi Menon", "title": "Ravi Menon arrested in fraud case",
+                 "url": "https://news.example/blocked", "snippet": "Ravi Menon arrested for fraud"}]
+        pages = {"https://news.example/blocked":
+                 "<h1>403 ERROR</h1><h2>The request could not be satisfied.</h2>Request blocked."}
+        job, r = self.run_job(Fake(company(), news=news, pages=pages))
+        self.assertFalse(r["namesakes_cleared"])
+        self.assertTrue(any("blocked" in c for c in r["cannot_verify"]))
+        self.assertNotEqual(r["verdict"], "REAL_AND_TRADING")
+
     def test_adverse_news_linked_holds(self):
         news = [{"subject": "Ravi Menon", "title": "Acme Freight director Ravi Menon arrested in GST fraud",
                  "url": "https://news.example/acme-raid", "snippet": "Ravi Menon of Acme Freight arrested"}]
@@ -224,6 +235,52 @@ class TestRealShape(Base):
         names_ = [l["name"] for l in r["who_runs_it"]]
         self.assertIn("Sahil Barua", names_)
         self.assertNotIn("reus zxz", names_)
+
+
+class TestShaktiBhogLessons(Base):
+    """Live run 22 Nov 2026 on 'Shakti Bhog Foods Limited' came back FRONT_SUSPECTED. It is a real
+    company whose CMD was arrested: the right answer is HOLD_FOR_REVIEW."""
+
+    def comp(self):
+        c = company(cid=1275326, name="Shakti Bhog", domain="shaktibhog.com", year=1992, headcount=237)
+        c["people"] = {"founders": [], "cxos": []}
+        return c
+
+    def name_only_matches(self, c):
+        same = lambda cid, nm: {"confidence_score": 0.6, "company_data": {
+            "crustdata_company_id": cid, "basic_info": {"name": nm, "primary_domain": "shaktibhog.com"}}}
+        return [same(1275326, "Shakti Bhog"), same(15319294, "Shakti Bhog Food"),
+                {"confidence_score": 0.6, "company_data": {"crustdata_company_id": 11000904,
+                 "basic_info": {"name": "SHAKTI BHOG SNACKS LIMITED", "primary_domain": None}}}]
+
+    def test_name_only_same_website_is_one_business(self):
+        c = self.comp()
+        job, r = self.run_job(Fake(c, reg_date="1999-09-11T00:00:00Z", identify_matches=self.name_only_matches(c)),
+                              {"name": "Shakti Bhog Foods Limited"})
+        ident = self.store.stage_output(job, "identify")
+        self.assertEqual(ident["status"], "RESOLVED")
+        self.assertFalse(r["looks_off"]["needs_review"])
+        self.assertTrue(any("similar names" in w for w in r["looks_off"]["weak"]))
+
+    def test_adverse_news_on_real_company_is_hold_not_front(self):
+        c = self.comp()
+        news = [{"subject": "Shakti Bhog", "title": "Shakti Bhog CMD arrested in fraud case",
+                 "url": "https://news.example/sb", "snippet": ""}]
+        job, r = self.run_job(Fake(c, reg_date="1999-09-11T00:00:00Z", news=news,
+                                   identify_matches=self.name_only_matches(c)),
+                              {"name": "Shakti Bhog Foods Limited"})
+        self.assertEqual(r["verdict"], "HOLD_FOR_REVIEW", r["looks_off"])
+        self.assertTrue(r["looks_off"]["adverse_news"])
+        self.assertFalse(r["looks_off"]["strong"])
+
+    def test_redirect_page_does_not_clear_a_namesake(self):
+        news = [{"subject": "Ravi Menon", "title": "Ravi Menon arrested in fraud case",
+                 "url": "https://www.google.com/goto?url=abc", "snippet": ""}]
+        pages = {"https://www.google.com/goto?url=abc":
+                 '<html><head><title>Google</title><meta content="0;url=/goto?url=abc" http-equiv="refresh">'}
+        job, r = self.run_job(Fake(company(), news=news, pages=pages))
+        self.assertFalse(r["namesakes_cleared"])
+        self.assertTrue(any("redirect" in c for c in r["cannot_verify"]))
 
 
 if __name__ == "__main__":

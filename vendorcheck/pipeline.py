@@ -62,6 +62,23 @@ def cite_job(ev, stage, person_name, res, job_path, job, profile_url):
              source_url=profile_url)
 
 
+BLOCK_MARKERS = ("checking your browser", "request could not be satisfied", "access denied", "just a moment",
+                 "attention required", "enable javascript and cookies", "are you a robot", "captcha")
+
+
+def blocked_reason(entry: dict) -> str:
+    """Web Fetch can report success=true for a 403 or a bot-check page. Detect those."""
+    status = entry.get("http_status")
+    if isinstance(status, int) and status >= 400:
+        return f"HTTP {status}"
+    content = entry.get("content") or ""
+    if (entry.get("title") or "").strip().lower() == "google" or "url=/goto?" in content[:3000]:
+        return "a search-engine redirect page, not the article"
+    head = f"{entry.get('title') or ''} {content[:600]}".lower()
+    hit = next((m for m in BLOCK_MARKERS if m in head), None)
+    return f"block page: '{hit}'" if hit else ""
+
+
 class Pipeline:
     def __init__(self, store: Store, cfg: dict, transport=urllib_transport, sleep=time.sleep, log=print):
         self.store, self.cfg, self.transport, self.sleep, self.log = store, cfg, transport, sleep, log
@@ -143,13 +160,32 @@ class Pipeline:
         cands = [{"i": i, "confidence": m.get("confidence_score"),
                   "id": m["company_data"].get("crustdata_company_id"),
                   "name": m["company_data"].get("basic_info", {}).get("name"),
-                  "domain": m["company_data"].get("basic_info", {}).get("primary_domain")}
+                  "domain": m["company_data"].get("basic_info", {}).get("primary_domain"),
+                  "employees": m["company_data"].get("basic_info", {}).get("employee_count_range")}
                  for i, m in enumerate(matches)]
-        top = cands[0]
         icfg = self.cfg["identity"]
+        for c in cands:
+            c["name_similarity"] = names.similarity(req["name"], c["name"]) if req["name"] else None
+        top = cands[0]
         exact_domain = bool(req["domain"]) and (top["domain"] or "").lower() == req["domain"]
         close = [c for c in cands[1:] if top["confidence"] - (c["confidence"] or 0) < icfg["ambiguity_gap"]]
         resolved = (top["confidence"] or 0) >= icfg["min_confidence"] and (exact_domain or not close)
+        similar_records = []
+        if not resolved and by == "name":
+            # Name-only lookups score every candidate the same (0.6 seen live). If the close
+            # candidates that have a website all share ONE website, that is one business.
+            # Name search returns many unrelated candidates at the same score (25 seen live, incl.
+            # "Tyson Foods"), so only candidates carrying every distinctive word of the name count.
+            group = [c for c in cands if names.names_same_business(req["name"], c["name"])]
+            sites = {c["domain"] for c in group if c["domain"]}
+            # Several records can share one website (seen: "Shakti Bhog" 201-500 staff, "Shakti Bhog
+            # Food" 3 staff); take the biggest, which is the main profile.
+            best = max(group, key=lambda c: (bool(c["domain"]), names.headcount_rank(c.get("employees")),
+                                             c["name_similarity"] or 0)) if group else None
+            if best and len(sites) == 1:
+                top, resolved = best, True
+                similar_records = [f"{c['name']} ({c['domain'] or 'no website'})" for c in group
+                                   if c["id"] != best["id"] and c["domain"] != best["domain"]]
 
         base = f"[0].matches[{top['i']}].company_data"
         self.ev.field("identify", "Company record matched to the request", res, f"{base}.basic_info.name")
@@ -162,7 +198,10 @@ class Pipeline:
         dup_job = self.store.earlier_job_for(self.job_id, keys)
         return {
             "status": "RESOLVED" if resolved else "AMBIGUOUS", "by": by, "top": top,
-            "candidates": cands[:5], "exact_domain": exact_domain, "name_similarity": sim,
+            "candidates": ([c for c in cands if names.names_same_business(req["name"], c["name"])] or cands)[:5]
+                          if by == "name" else cands[:5],
+            "exact_domain": exact_domain, "name_similarity": sim,
+            "similar_records": similar_records,
             "company_keys": keys,
             "duplicate_of": (dict(dup_reg) if dup_reg else None),
             "earlier_job": ({"id": dup_job["id"], "verdict": dup_job["verdict"]} if dup_job else None),
@@ -307,7 +346,7 @@ class Pipeline:
         if not company:
             return {"status": "SKIPPED", "reason": "no company name to search"}
         leaders = [l["name"] for l in (self.out("leaders") or {}).get("leaders", [])]
-        subjects = [("company", company)] + [("person", n) for n in leaders]
+        subjects = [("company", names.search_name(company))] + [("person", n) for n in leaders]
         core = names.core_name(company)
 
         findings, fetched = [], 0
@@ -319,20 +358,28 @@ class Pipeline:
         searches = [{"subject": ", ".join(n for _, n in subjects), "query": q,
                      "status": res.status, "error": res.error}]
         results = (res.data.get("results") or []) if res.status == FOUND and isinstance(res.data, dict) else []
-        for r in results[: mcfg["max_results_per_query"]]:
+        for ri, r in enumerate(results[: mcfg["max_results_per_query"]]):
             blob = f"{r.get('title') or ''} {r.get('snippet') or ''}".lower()
             hit_terms = [t for t in terms if t in blob]
             if not hit_terms:
                 continue
             for kind, subject in subjects:
                 if kind == "company":
-                    named = core and core in names.core_name(blob)
+                    named = names.mentions_business(subject, blob)
                 else:
                     named = subject.lower() in blob
                 if not named:
                     continue
                 item = {"subject": subject, "kind": kind, "title": (r.get("title") or "")[:200],
                         "url": r.get("url"), "terms": hit_terms}
+                if kind == "company":
+                    # The headline itself names the vendor next to an adverse term: that is the link.
+                    # (Namesake clearing is for people; a person reviews company-name collisions.)
+                    self.ev.field("media", f"News headline naming {subject}", res, f"results[{ri}].title",
+                                  source_url=r.get("url"))
+                    item.update(link="LINKED", why=f"the headline names {subject}")
+                    findings.append(item)
+                    continue
                 if fetched >= mcfg["max_articles_fetched"]:
                     item.update(link="UNRESOLVED", why="article not read: fetch limit reached")
                     findings.append(item)
@@ -343,7 +390,20 @@ class Pipeline:
                     item.update(link="UNRESOLVED", why=f"article could not be fetched ({page.status})")
                     findings.append(item)
                     continue
-                text = html_to_text((page.data[0] or {}).get("content") or "")
+                entry = page.data[0] or {}
+                blocked = blocked_reason(entry)
+                if blocked:          # a block page is not the article: never clear a namesake from it
+                    item.update(link="UNRESOLVED", why=f"site blocked automated reading ({blocked})")
+                    findings.append(item)
+                    continue
+                text = html_to_text(entry.get("content") or "")
+                if subject.lower() not in text.lower():
+                    # We did not read the article (other language, redirect, paywall). Absence of the
+                    # vendor's name in text we could not read is not evidence of a namesake.
+                    item.update(link="UNRESOLVED", why=f"the fetched page does not contain '{subject}', so the "
+                                                        "article was not read (other language, redirect or paywall)")
+                    findings.append(item)
+                    continue
                 mentions_vendor = (core and core in names.core_name(text)) or (domain and domain in text.lower())
                 linked = mentions_vendor
                 passage = snippet_around(text, subject) or snippet_around(text, hit_terms[0])

@@ -18,7 +18,8 @@ UNANSWERED = ("UNAVAILABLE", "ERROR", "SKIPPED_BUDGET")
 def decide(cfg: dict, o: dict) -> dict:
     req, ident, enr = o.get("take_request") or {}, o.get("identify") or {}, o.get("enrich") or {}
     dom, lead, media = o.get("domain_age") or {}, o.get("leaders") or {}, o.get("media") or {}
-    strong, weak, positive, cannot = [], [], [], []
+    strong, weak, positive, cannot = [], [], [], []   # strong = signs of a FRONT (fake business)
+    adverse, review = [], []                              # real-but-risky: these send it to a person
 
     # ---- request itself
     if req.get("missing"):
@@ -34,11 +35,14 @@ def decide(cfg: dict, o: dict) -> dict:
                       f"{req.get('domain') or req.get('name')}.")
     elif status == "AMBIGUOUS":
         names_ = ", ".join(f"{c['name']} ({c['domain']})" for c in ident.get("candidates", [])[:3])
-        strong.append(f"Ambiguous identity: several records match closely ({names_}). Possible lookalike.")
+        review.append(f"Ambiguous identity: several records match closely ({names_}). Possible lookalike.")
     sim = ident.get("name_similarity")
     if sim is not None and sim < cfg["identity"]["min_name_similarity"] and status == "RESOLVED":
         strong.append(f"Name mismatch: the request says '{req.get('name')}' but the website belongs to "
                       f"'{ident['top']['name']}' (similarity {sim}). Possible lookalike or impersonation.")
+    if ident.get("similar_records"):
+        weak.append("Identified by name only; other records with similar names exist: "
+                    + ", ".join(ident["similar_records"][:3]) + ". Confirm the vendor's website.")
     if ident.get("duplicate_of"):
         d = ident["duplicate_of"]
         weak.append(f"Duplicate: this company was already {d['decision']} in job {d['job_id']}.")
@@ -106,7 +110,7 @@ def decide(cfg: dict, o: dict) -> dict:
         by_article.setdefault(f["url"], []).append(f)
     for url, fs in by_article.items():
         who = " and ".join(dict.fromkeys(f["subject"] for f in fs))
-        strong.append(f"Adverse news linked to {who}: \"{fs[0]['title']}\" ({', '.join(fs[0]['terms'])}).")
+        adverse.append(f"Adverse news linked to {who}: \"{fs[0]['title']}\" ({', '.join(fs[0]['terms'])}).")
     for f in unresolved:
         cannot.append(f"Adverse news about {f['subject']} could not be checked: {f['why']}.")
     failed = [s for s in media.get("searches", []) if s["status"] in UNANSWERED]
@@ -118,7 +122,7 @@ def decide(cfg: dict, o: dict) -> dict:
     identity_ok = status == "RESOLVED"
     if len(strong) >= n_front:
         verdict = "FRONT_SUSPECTED"
-    elif strong or linked or ident.get("duplicate_of") or ident.get("earlier_job"):
+    elif strong or adverse or review or ident.get("duplicate_of") or ident.get("earlier_job"):
         verdict = "HOLD_FOR_REVIEW"
     elif not identity_ok:
         verdict = "CANNOT_VERIFY"
@@ -136,16 +140,18 @@ def decide(cfg: dict, o: dict) -> dict:
         "is_trading": positive,
         "namesakes_cleared": [f"{f['subject']}: {f['title']} ({f['url']}) — {f['why']}" for f in cleared],
     }
-    return _result(verdict, cannot, strong, weak, positive, answer, req)
+    return _result(verdict, cannot, strong, weak, positive, answer, req, adverse, review)
 
 
-def _result(verdict, cannot, strong, weak, positive, answer, req):
+def _result(verdict, cannot, strong, weak, positive, answer, req, adverse=(), review=()):
+    adverse, review = list(adverse), list(review)
     who = req.get("name") or req.get("domain")
     summary = {
         "REAL_AND_TRADING": f"{who} looks like a real, trading business.",
         "FRONT_SUSPECTED": f"{who} shows {len(strong)} independent red flags of a front company.",
-        "HOLD_FOR_REVIEW": f"{who} needs a person to review: " + "; ".join((strong + weak)[:2]),
+        "HOLD_FOR_REVIEW": f"{who} needs a person to review: " + "; ".join((strong + adverse + review + weak)[:2]),
         "CANNOT_VERIFY": f"Cannot verify {who}: " + "; ".join(cannot[:2]),
     }[verdict]
-    return {"verdict": verdict, "summary": summary, "looks_off": {"strong": strong, "weak": weak},
+    return {"verdict": verdict, "summary": summary,
+            "looks_off": {"strong": strong, "adverse_news": adverse, "needs_review": review, "weak": weak},
             "cannot_verify": cannot, **answer, "decided_at": datetime.now().isoformat(timespec="seconds")}
