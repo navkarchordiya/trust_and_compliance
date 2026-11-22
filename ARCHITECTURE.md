@@ -22,6 +22,8 @@ flowchart TD
     ACT --> REG[(vendor register)]
     ACT --> OUT[(outbox: internal team only)]
     DECIDE --> SHOW[6. Show its work<br/>verdict, facts + sources, cost]
+    SHOW --> APP[Review app: python -m vendorcheck serve<br/>evidence file, raw responses, ledger, approve]
+    APP -->|approve / decline + reason| ACT
 
     subgraph SC[SourceClient — every outside call]
         RETRY[retries + backoff<br/>timeout / 5xx / 429] --> CLASS[FOUND / NOT_FOUND /<br/>UNAVAILABLE / ERROR]

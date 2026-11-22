@@ -16,6 +16,8 @@
   python -m vendorcheck costs             # measured cost per job, across all runs
   python -m vendorcheck purge --days 30   # delete stored raw responses of closed jobs (retention)
   python -m vendorcheck log JOB           # the run's event log
+  python -m vendorcheck serve [--port N]  # review app: start checks, read evidence, approve
+  python -m vendorcheck report JOB --html # the evidence file as a web page
 """
 import argparse
 import json
@@ -73,6 +75,12 @@ def main(argv=None):
     pg.add_argument("--days", type=float, default=cfg.get("privacy", {}).get("retention_days", 30))
     lg = sub.add_parser("log")
     lg.add_argument("job")
+    sv = sub.add_parser("serve")
+    sv.add_argument("--port", type=int, default=8765)
+    sv.add_argument("--host", default="127.0.0.1")
+    rp = sub.add_parser("report")
+    rp.add_argument("job")
+    rp.add_argument("--html", action="store_true")
     args = ap.parse_args(argv)
 
     store = Store(args.db)
@@ -83,7 +91,7 @@ def main(argv=None):
         res = build_result(store, cfg, job_id)
         print(json.dumps(res, indent=2, ensure_ascii=False) if as_json else render_text(res))
 
-    if args.cmd in ("run", "resume", "batch", "eval") and not os.environ.get("CRUSTDATA_API_KEY"):
+    if args.cmd in ("run", "resume", "batch", "eval", "serve") and not os.environ.get("CRUSTDATA_API_KEY"):
         print("WARNING: CRUSTDATA_API_KEY is not set (copy .env.example to .env). "
               "Crustdata checks will come back as 'cannot verify'.", file=sys.stderr)
 
@@ -124,6 +132,19 @@ def main(argv=None):
         n = store.purge_raw_responses(args.days)
         print(f"deleted the raw responses of {n} calls from closed jobs older than {args.days:g} days "
               "(facts, quotes and sources are kept)")
+    elif args.cmd == "serve":
+        from .web import serve
+        serve(str(store.path), cfg, args.host, args.port)
+    elif args.cmd == "report":
+        from .html_report import render_job
+        result = build_result(store, cfg, args.job)
+        if args.html:
+            out = store.path.parent / "results" / f"{args.job}.html"
+            out.parent.mkdir(parents=True, exist_ok=True)
+            out.write_text(render_job(result), encoding="utf-8")
+            print(out)
+        else:
+            print(render_text(result))
     elif args.cmd == "log":
         path = store.log_dir / f"{args.job}.jsonl"
         print(path.read_text() if path.exists() else "no log for that job")

@@ -5,7 +5,8 @@
 base_url = "https://api.crustdata.com"
 api_version = "2025-11-01"
 enrich_fields = ["basic_info", "headcount.total", "headcount.growth_percent", "locations",
-                 "hiring.openings_count", "news", "people.founders", "people.cxos"]
+                 "hiring.openings_count", "news", "people.founders", "people.cxos", "metadata"]
+# metadata.updated_at / indexed_at is the record's refresh date when Crustdata fills it (null for Delhivery, 22 Nov)
 # Nested paths keep the response small: plain "people" returns ~300 decision makers (5.5 MB).
 
 [limits]

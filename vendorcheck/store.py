@@ -99,7 +99,9 @@ class Store:
         path = Path(path) if path else ROOT / "data" / "vendorcheck.db"
         path.parent.mkdir(parents=True, exist_ok=True)
         self.log_dir = path.parent / "logs"              # one JSON-lines event log per job
-        self.db = sqlite3.connect(str(path), isolation_level=None)  # autocommit; explicit BEGIN for transactions
+        self.path = path
+        # timeout: the review app runs checks on background threads; writers wait instead of failing
+        self.db = sqlite3.connect(str(path), isolation_level=None, timeout=30)  # autocommit; explicit BEGIN for transactions
         self.db.row_factory = sqlite3.Row
         self.db.execute("PRAGMA journal_mode=WAL")
         self.db.execute("PRAGMA synchronous=FULL")

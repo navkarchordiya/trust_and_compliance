@@ -31,7 +31,8 @@ def build_result(store: Store, cfg: dict, job_id: str) -> dict:
         "summary": d.get("summary"),
         "recommended_action": appr["recommended_action"] if appr else None,
         "approval": ({"status": appr["status"], "decided_by": appr["decided_by"],
-                      "decided_action": appr["decided_action"], "decided_at": appr["decided_at"]}
+                      "decided_action": appr["decided_action"], "decided_at": appr["decided_at"],
+                      "override_reason": appr["override_reason"]}
                      if appr else None),
         "who_runs_it": d.get("who_runs_it"),
         "how_long_it_has_existed": d.get("how_long_it_has_existed"),
@@ -43,7 +44,7 @@ def build_result(store: Store, cfg: dict, job_id: str) -> dict:
         "facts": [{"id": f["id"], "claim": f["claim"], "value": json.loads(f["value_json"]),
                    "source": f["source_url"], "field_or_passage": f["locator"], "quote": f["quote"],
                    "record_date": f["record_date"], "retrieved_at": f["retrieved_at"],
-                   "raw_response": f"call #{f['call_id']}"}
+                   "raw_response": f"call #{f['call_id']}", "call_id": f["call_id"]}
                   for f in store.facts(job_id)],
         "cost": {"crustdata_credits": credits,
                  "credits_estimated_not_reported": round(estimated, 3),

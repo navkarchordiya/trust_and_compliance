@@ -60,6 +60,18 @@ verified, every fact with its source, and the cost of the run.
 | GST registry via Cashfree Secure ID (`/verification/gstin`, optional) | GST status, legal and trade name, registration date for the GSTIN | per provider plan |
 | RDAP (`rdap.org`) | Domain registration date, independent of the company's own claims | free |
 
+## Review app (the compliance team's screen)
+
+```bash
+python -m vendorcheck serve          # http://127.0.0.1:8765
+```
+
+Start a check (name, website, optional GSTIN), read the evidence file (verdict, the reasons behind
+it, who runs it, every fact with its field or passage, record date and retrieval time), open the stored
+raw response behind any API fact, see the cost ledger and event log, and approve or decline. Approving
+twice does nothing the second time. Killing the server mid-check and starting it again resumes the
+check. `python -m vendorcheck report JOB --html` writes the same evidence file as a standalone page.
+
 ## Hard cases (from the brief) and how each is handled
 
 | Case | What the service does | Test |

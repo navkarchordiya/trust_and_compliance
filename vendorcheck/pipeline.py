@@ -279,7 +279,9 @@ class Pipeline:
             return {"status": res.status, "error": res.error,
                     "missing": f"Company Enrich returned {res.status}"}
         b = "[0].matches[0].company_data"
-        f = lambda claim, path: self.ev.field("enrich", claim, res, f"{b}.{path}")
+        meta = (res.data[0]["matches"][0]["company_data"].get("metadata") or {})
+        record_date = meta.get("updated_at") or meta.get("indexed_at")     # refresh date, when given
+        f = lambda claim, path: self.ev.field("enrich", claim, res, f"{b}.{path}", record_date=record_date)
         out = {
             "status": "FOUND",
             "name": f("Company name", "basic_info.name"),
