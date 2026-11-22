@@ -41,6 +41,7 @@ min_headcount = 3              # fewer visible employees than this = weak signal
 
 [people]
 max_leaders = 3                # founders first, then CXOs
+min_founder_connections = 10  # seen live: Blue Dart's listed "founder" has 0 connections (self-declared)
 min_connections = 50           # CXOs below this are usually junk self-reported titles (seen: "reus zxz, Ceo")
 
 [media]
@@ -53,13 +54,22 @@ adverse_terms = ["jail", "sentenced", "fir", "eow", "cbi", "probe", "contempt", 
                  "insolvency", "ponzi", "sebi order", "enforcement directorate", "ed raid"]
 
 # Articles where the vendor is the victim or is being impersonated are not adverse news about it.
-victim_context = ["impersonat", "posing as", "in the name of", "beware of", "fake website",
-                  "fake job", "duped by fake", "cheated by fake", "pretending to be"]
+# Seen live (22 Nov): most "Blue Dart" fraud news is scams run IN ITS NAME ("using fake Blue Dart courier
+# identity", "fraud in the name of courier company Blue Dart"), often in Hindi.
+victim_context = ["impersonat", "posing as", "in the name of", "beware", "fake website", "fake job",
+                  "fake agent", "fake courier", "fake delivery", "fake customer care", "fake helpline",
+                  "fraudsters", "scammers", "cyber criminals", "cyber fraud", "cyber thugs", "duped by fake",
+                  "cheated by fake", "pretending to be", "parcel scam", "parcel fraud", "delivery scam",
+                  "delivery fraud", "courier scam", "courier fraud", "phishing",
+                  "के नाम पर", "फर्जी एजेंट", "साइबर ठग", "साइबर फ्रॉड"]
+# Non-English adverse words (matched as text, since Devanagari has no reliable word boundary).
+adverse_terms_hi = ["गिरफ्तार", "धोखाधड़ी", "घोटाला", "छापा", "छापेमारी", "फ्रॉड", "अरेस्ट", "मनी लॉन्ड्रिंग"]
 
 [registry]
 # A GSTIN comes from the request (--gstin, as on an onboarding form) or else from the vendor's own website, checked with the GSTIN checksum, then (if a
 # provider key is set in .env) verified against the GST registry.
 website_paths = [""]           # homepage only: big firms rarely print a GSTIN (checked live), so keep it cheap
+try_www_first = true           # seen live: https://delhivery.com fails (certificate) while https://www.delhivery.com works
 max_pages = 1
 provider = "cashfree"          # "cashfree" or "none"; needs CASHFREE_CLIENT_ID / CASHFREE_CLIENT_SECRET
 cashfree_base_url = "https://sandbox.cashfree.com/verification"   # production: https://api.cashfree.com/verification

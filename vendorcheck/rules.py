@@ -47,9 +47,14 @@ def decide(cfg: dict, o: dict) -> dict:
         cannot.append(f"Company identity: no company record for the website {req.get('domain')}.")
     elif status == "NAME_UNCONFIRMED":
         top = ident.get("top") or {}
-        cannot.append(f"Company identity: no website given, and the closest record ('{top.get('name')}', "
-                      f"{top.get('domain')}) only partly matches the name '{req.get('name')}' "
-                      f"(similarity {ident.get('name_similarity')}). Send the vendor's website.")
+        if req.get("domain"):
+            cannot.append(f"Company identity: no company record has the website {req['domain']}, and no single "
+                          f"firm clearly carries the name '{req.get('name')}' (closest: '{top.get('name')}', "
+                          f"{top.get('domain') or 'no website'}).")
+        else:
+            cannot.append(f"Company identity: no website given, and no single firm clearly carries the name "
+                          f"'{req.get('name')}' (closest: '{top.get('name')}', {top.get('domain') or 'no website'}). "
+                          "Send the vendor's website.")
     sim = ident.get("name_similarity")
     if sim is not None and sim < cfg["identity"]["min_name_similarity"] and status == "RESOLVED":
         strong.append(f"Name mismatch: the request says '{req.get('name')}' but the website belongs to "
@@ -66,7 +71,11 @@ def decide(cfg: dict, o: dict) -> dict:
             weak.append(f"Duplicate: this company was already {d['decision']} in job {d['job_id']} "
                         f"(matched on {d.get('matched_on')}).")
         review.append("Possible duplicate of an existing vendor; the rest of the check was not repeated.")
-    elif ident.get("earlier_job"):
+    if ident.get("same_name_as"):
+        n = ident["same_name_as"]
+        weak.append(f"Same name as a vendor in job {n['job_id']} ({n.get('domain') or 'other website'}), but a "
+                    "different website: check it is not a duplicate or a lookalike.")
+    if not ident.get("duplicate_of") and ident.get("earlier_job"):
         weak.append(f"Duplicate request: the same company is already being checked in job "
                     f"{ident['earlier_job']['id']} (verdict {ident['earlier_job']['verdict'] or 'pending'}).")
         review.append("Possible duplicate request; the rest of the check was not repeated.")
@@ -113,6 +122,10 @@ def decide(cfg: dict, o: dict) -> dict:
     reg_summary = []
     if reg.get("status") in UNANSWERED:
         cannot.append(f"GST registration: {reg.get('missing') or 'the website could not be read'}.")
+        pages = reg.get("pages") or []
+        if pages and all("host not found" in (p.get("error") or "").lower() for p in pages):
+            weak.append(f"The website given ({req.get('domain')}) does not exist: no DNS record "
+                        f"(checked {', '.join(p['url'] for p in pages)}).")
     elif reg.get("status") == "DONE" and not reg.get("gstins"):
         cannot.append("GST registration: no GSTIN found on the vendor's website; ask the vendor for it.")
     claimed_name = enr.get("name") or req.get("name")

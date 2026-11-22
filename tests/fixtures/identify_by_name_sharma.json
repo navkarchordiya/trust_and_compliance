@@ -1,0 +1,106 @@
+[
+ {
+  "matched_on": "Sharma Trading Co",
+  "match_type": "name",
+  "matches": [
+   {
+    "confidence_score": 0.8,
+    "company_data": {
+     "crustdata_company_id": 71577933,
+     "basic_info": {
+      "name": "Sharma Manufacturing & Trading Co.",
+      "crustdata_company_id": 71577933,
+      "primary_domain": "sharmamfg.com",
+      "all_domains": [
+       "sharmamfg.com"
+      ],
+      "website": "http://www.sharmamfg.com",
+      "employee_count_range": "11-50",
+      "year_founded": 1995
+     }
+    }
+   },
+   {
+    "confidence_score": 0.6,
+    "company_data": {
+     "crustdata_company_id": 30526127,
+     "basic_info": {
+      "name": "SHARMA TRADING LIMITED",
+      "crustdata_company_id": 30526127,
+      "primary_domain": null,
+      "all_domains": [],
+      "website": null,
+      "employee_count_range": null,
+      "year_founded": null
+     }
+    }
+   },
+   {
+    "confidence_score": 0.6,
+    "company_data": {
+     "crustdata_company_id": 25051642,
+     "basic_info": {
+      "name": "RAJ SHARMA TRADING LLC",
+      "crustdata_company_id": 25051642,
+      "primary_domain": "rstrading-uae.com",
+      "all_domains": [
+       "rstrading-uae.com"
+      ],
+      "website": "http://www.rstrading-uae.com",
+      "employee_count_range": "2-10",
+      "year_founded": null
+     }
+    }
+   },
+   {
+    "confidence_score": 0.6,
+    "company_data": {
+     "crustdata_company_id": 18735664,
+     "basic_info": {
+      "name": "AK SHARMA TRADING LTD",
+      "crustdata_company_id": 18735664,
+      "primary_domain": null,
+      "all_domains": [],
+      "website": null,
+      "employee_count_range": null,
+      "year_founded": 1900
+     }
+    }
+   },
+   {
+    "confidence_score": 0.6,
+    "company_data": {
+     "crustdata_company_id": 6373287,
+     "basic_info": {
+      "name": "TRADING COMPANY",
+      "crustdata_company_id": 6373287,
+      "primary_domain": "ec21.com",
+      "all_domains": [
+       "ec21.com"
+      ],
+      "website": "http://www.michelline.en.ec21.com",
+      "employee_count_range": "11-50",
+      "year_founded": 1980
+     }
+    }
+   },
+   {
+    "confidence_score": 0.6,
+    "company_data": {
+     "crustdata_company_id": 5057,
+     "basic_info": {
+      "name": "Tata Consultancy Services",
+      "crustdata_company_id": 5057,
+      "primary_domain": "tcs.com",
+      "all_domains": [
+       "tcs.com"
+      ],
+      "website": "https://www.tcs.com/",
+      "employee_count_range": "10001+",
+      "year_founded": 1968
+     }
+    }
+   }
+  ]
+ }
+]

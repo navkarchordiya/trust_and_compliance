@@ -1,0 +1,1 @@
+{"endpoint": "/company/identify", "payload": {"domains": ["sharma-trading-co-2026.in"]}, "credits": 0, "http_status": 200, "text": "[{\"matched_on\": \"sharma-trading-co-2026.in\", \"match_type\": \"domain\", \"matches\": []}]"}

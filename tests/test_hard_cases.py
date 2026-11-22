@@ -109,7 +109,7 @@ class TestAdverseMatching(Base):
 
 class TestRegistry(Base):
     def site(self, gstin):
-        return {"https://acmefreight.in": f"<footer>Acme Freight Private Limited · GSTIN: {gstin}</footer>"}
+        return {"https://www.acmefreight.in": f"<footer>Acme Freight Private Limited · GSTIN: {gstin}</footer>"}
 
     def test_gstin_checksum(self):
         self.assertTrue(names.gstin_checksum_ok(VALID_GSTIN))
@@ -337,3 +337,24 @@ class TestRequirementChangeReadiness(Base):
         self.cfg["output"]["fields"] = [f for f in self.cfg["output"]["fields"] if f != "registry"]
         job, r = self.run_job(Fake(company()))
         self.assertNotIn("registry", r)
+
+
+class TestRealIdentifySharma(Base):
+    """Real Identify-by-name answer for "Sharma Trading Co" (trimmed, fetched 22 Nov 2026): four different
+    'Sharma ... Trading' firms. An unknown vendor with that name must not be called a lookalike of any of them."""
+
+    def test_loose_name_matches_are_cannot_verify_not_lookalike(self):
+        real = json.loads((Path(__file__).parent / "fixtures" / "identify_by_name_sharma.json").read_text())
+        inner = Fake(company())
+
+        def transport(method, url, headers, body, timeout):
+            payload = json.loads(body) if body else {}
+            if url.endswith("/company/identify"):
+                if payload.get("domains"):
+                    return 200, {}, json.dumps([{"matches": []}])
+                return 200, {}, json.dumps(real)
+            return inner(method, url, headers, body, timeout)
+        job, r = self.run_job(transport, {"name": "Sharma Trading Co", "website": "sharma-trading-co-2026.in"})
+        self.assertEqual(r["verdict"], "CANNOT_VERIFY", r["looks_off"])
+        self.assertFalse(r["looks_off"]["strong"])
+        self.assertNotIn("/company/enrich", inner.count)

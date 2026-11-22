@@ -1,0 +1,1 @@
+{"endpoint": "/company/identify", "payload": {"domains": ["delhivery-logistics-india.com"]}, "credits": 0, "http_status": 200, "text": "[{\"matched_on\": \"delhivery-logistics-india.com\", \"match_type\": \"domain\", \"matches\": []}]"}

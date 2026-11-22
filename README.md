@@ -100,6 +100,10 @@ person can reject the vendor, which updates the register.
 | Vendor is the victim ("fraudsters posing as …") | Not adverse | `test_vendor_as_victim_is_not_adverse` |
 | Fake or cancelled GSTIN | Check-digit failure or non-active registry status: **strong red flag** | `TestRegistry` |
 
+**On real data:** `python scripts/replay_live.py` runs `tests/cases.json` on real Crustdata answers recorded on
+22 Nov 2026 (Delhivery, Blue Dart, Shakti Bhog, a lookalike, a duplicate, an unknown vendor, an ambiguous shell
+name): **8/8 pass, 0 wrong answers**. It is part of the test suite.
+
 A wrong answer counts against us more than *cannot verify*, so every rule falls back to
 *cannot verify* or *hold* when the evidence is incomplete.
 

@@ -89,6 +89,22 @@ What we tried, what works, and what comes next. (The guide: "They are the heart 
   shell firms after 1 Sep 2026 rarely names one with a website, so for fronts the property we test is
   "never approved". 40 tests.
 
+- 13:40 **Live eval on real Crustdata data: 8/8 pass, 0 wrong answers** (`python scripts/replay_live.py`;
+  23 real answers recorded through the Crustdata connector, now a regression test). What the real data broke:
+  - "Sharma Trading Co" + unknown website loosely matched four different "Sharma ... Trading" firms; we called it
+    a **lookalike** of one (a false accusation). Now a lookalike needs near-exact name matches pointing at ONE firm.
+  - "RK Enterprises" by name = 10+ different firms: we paid to enrich a random one and dated its website. Now an
+    ambiguous name skips enrich, news and domain age (0 credits) and goes to a person.
+  - Blue Dart's only "founder" is a self-declared profile with **0 connections**; three "CEO"s have 1. Founders
+    now need ≥10 connections, CXOs ≥50, before anyone is reported as running the company.
+  - Most "Blue Dart" fraud news is scams **in its name**, often in Hindi ("के नाम पर" = "in the name of"). Victim
+    markers expanded (English + Hindi); Hindi adverse words added for mixed headlines (Shakti Bhog "CMD अरेस्ट").
+  - `https://delhivery.com` fails (certificate) while `www.` works; Shakti Bhog serves a 403 bot-check page.
+    Homepage read now tries `www.` first and treats block pages as unreadable, never as "no GSTIN".
+  - Same name + different website was stopped as a "duplicate" (skipping the lookalike's checks). Now flagged
+    and the check continues; a name match only counts as a duplicate when nothing else tells them apart.
+  - A website with no DNS record is reported (weak signal).
+
 ## Declared before 10:15
 
 TODO before submitting: list anything written before 10:15 (code, prompts, notes), or write "Nothing".

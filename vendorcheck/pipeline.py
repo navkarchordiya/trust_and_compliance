@@ -229,15 +229,20 @@ class Pipeline:
             elif req["domain"]:
                 # Identify by the WEBSITE found nothing, so the request's website is unknown to the source.
                 same_site = [c for c in group if req["domain"] in c["all_domains"]]
-                top = same_site[0] if same_site else max(group, key=rank)
+                # A lookalike accusation needs the name to point clearly at ONE known firm: near-exact
+                # name matches that all share one website. Seen live: "Sharma Trading Co" loosely
+                # matches four different "Sharma ... Trading" firms; that is "cannot verify", not a lookalike.
+                strict = [c for c in group if (c["name_similarity"] or 0) >= icfg.get("name_only_min_similarity", 0.85)]
+                strict_sites = {c["domain"] for c in strict}
+                top = same_site[0] if same_site else max(strict or group, key=rank)
                 if same_site:
                     status = "RESOLVED"
-                elif top["all_domains"]:
-                    # The NAME matches a firm with another website: the lookalike pattern.
+                elif strict and len(strict_sites) == 1 and top["all_domains"]:
+                    # The NAME clearly belongs to a firm with another website: the lookalike pattern.
                     # Never borrow the real firm's evidence for this vendor.
                     status = "DOMAIN_MISMATCH"
                 else:
-                    status = "NAME_UNCONFIRMED"  # the namesake record has no website to compare with
+                    status = "NAME_UNCONFIRMED"  # no single firm clearly carries this name
             else:
                 top = max(group, key=rank)
                 status = "RESOLVED" if len(sites) == 1 else "AMBIGUOUS"
@@ -289,10 +294,25 @@ class Pipeline:
         """Duplicate check on the normalised domain and the Crustdata company ID: against the vendor
         register (already approved or rejected) and against other open jobs."""
         keys = [k for k in keys if k]
-        dup_reg = self.store.register_lookup(keys)
-        dup_job = self.store.earlier_job_for(self.job_id, keys)
-        out.update(company_keys=keys,
-                   duplicate_of=dup_reg,
+        hard = [k for k in keys if not k.startswith("name:")]        # Crustdata ID, website, GSTIN
+        soft = [k for k in keys if k.startswith("name:")]            # the normalised name
+        req = self.out("take_request") or {}
+        dup_reg = self.store.register_lookup(hard)
+        dup_job = self.store.earlier_job_for(self.job_id, hard)
+        same_name = None
+        if not (dup_reg or dup_job) and soft:
+            by_name = self.store.register_lookup(soft)
+            job_by_name = self.store.earlier_job_for(self.job_id, soft)
+            other_site = (by_name or {}).get("domain") if by_name else None
+            if by_name and (not req.get("domain") or not other_site):
+                dup_reg = by_name             # nothing else tells them apart: treat as the same vendor
+            elif job_by_name and not req.get("domain"):
+                dup_job = job_by_name
+            elif by_name or job_by_name:
+                # Same name, different website: maybe a duplicate, maybe a lookalike. Flag it and keep checking.
+                same_name = {"job_id": (by_name or {}).get("job_id") or job_by_name["id"],
+                             "name": (by_name or {}).get("name"), "domain": other_site, "matched_on": soft[0]}
+        out.update(company_keys=keys, duplicate_of=dup_reg, same_name_as=same_name,
                    earlier_job={"id": dup_job["id"], "verdict": dup_job["verdict"]} if dup_job else None)
         if dup_reg or dup_job:
             out["_stop"] = True     # a duplicate is held for a person; no need to pay for the rest
@@ -303,6 +323,10 @@ class Pipeline:
         ident = self.out("identify")
         if ident.get("status") not in ("RESOLVED", "AMBIGUOUS"):
             return {"status": "SKIPPED", "reason": "company not identified"}
+        if ident.get("status") == "AMBIGUOUS" and ident.get("by") == "name":
+            # Seen live: "RK Enterprises" by name matches 10+ different firms on different websites.
+            # We do not know which one is meant, so do not pay to profile a guess; a person picks.
+            return {"status": "SKIPPED", "reason": "several different firms carry this name; a person must pick one"}
         res = self.cd.enrich_company(ident["top"]["id"])
         if res.status != FOUND:
             return {"status": res.status, "error": res.error,
@@ -332,11 +356,17 @@ class Pipeline:
 
         # Founders first, then CXOs ranked by network size (junk self-reported titles have ~0).
         ranked = []
+        # Seen live: Blue Dart's only listed "founder" is a self-declared profile with 0 connections, and
+        # its CXO list has three "CEO"s with 1 connection. Junk profiles are dropped before anyone is
+        # reported as running the company (founders get a lower bar: a real small-firm founder may
+        # have a small network).
+        min_founder_conn = self.cfg["people"].get("min_founder_connections", 0)
         for group in ("founders", "cxos"):
             members = list(enumerate(((cd.get("people") or {}).get(group)) or []))
+            floor = min_founder_conn if group == "founders" else min_conn
+            members = [(i, p) for i, p in members
+                       if isinstance(p, dict) and ((p.get("professional_network") or {}).get("connections") or 0) >= floor]
             if group == "cxos":
-                members = [(i, p) for i, p in members
-                           if ((p.get("professional_network") or {}).get("connections") or 0) >= min_conn]
                 members.sort(key=lambda ip: -((ip[1].get("professional_network") or {}).get("connections") or 0))
             ranked += [(group, i, p) for i, p in members if isinstance(p, dict)]
 
@@ -384,9 +414,13 @@ class Pipeline:
 
     # ------------------------------------------------------------------ 3. gather: domain age
     def s_domain_age(self) -> dict:
-        domain = self.out("take_request")["domain"] or (self.out("identify").get("top") or {}).get("domain")
+        ident = self.out("identify") or {}
+        # Only the vendor's own website, or the website of a company we resolved it to; never the website
+        # of one candidate among several (seen live: "RK Enterprises" -> a random rkenterprises.lk).
+        domain = self.out("take_request")["domain"] or \
+            ((ident.get("top") or {}).get("domain") if ident.get("status") == "RESOLVED" else None)
         if not domain:
-            return {"status": "SKIPPED", "reason": "no domain"}
+            return {"status": "SKIPPED", "reason": "no website to date"}
         res = rdap_domain(self.client, domain)
         if res.status != FOUND or not isinstance(res.data, dict):
             return {"status": res.status, "error": res.error, "missing": f"Domain registry (RDAP) for {domain}"}
@@ -421,13 +455,22 @@ class Pipeline:
         if not gstins and domain and remaining - self.cfg["credit_estimates"]["/web/enrich/live"] < reserve:
             return {"status": "SKIPPED_BUDGET", "gstins": [],
                     "missing": "the homepage was not read, to keep the run's credit budget for the news check"}
+        hosts = [domain]
+        if rcfg.get("try_www_first", True) and domain and domain.count(".") == 1:
+            hosts = [f"www.{domain}", domain]           # a bare-domain fallback only if www fails
         for path in ([] if gstins or not domain else rcfg.get("website_paths", [""])[: rcfg.get("max_pages", 1)]):
-            url = f"https://{domain}/{path}".rstrip("/")
-            page = self.cd.web_fetch(url)
-            pages.append({"url": url, "status": page.status, "error": page.error})
-            if page.status != FOUND:
+            for host in hosts:
+                url = f"https://{host}/{path}".rstrip("/")
+                page = self.cd.web_fetch(url)
+                entry = ((page.data or [{}])[0] or {}) if isinstance(page.data, list) else {}
+                blocked = blocked_reason(entry) if page.status == FOUND else ""
+                pages.append({"url": url, "status": "BLOCKED" if blocked else page.status,
+                              "error": blocked or page.error or entry.get("message") or ""})
+                if page.status == FOUND and not blocked:
+                    break
+            if pages[-1]["status"] != FOUND:
                 continue
-            text = html_to_text(((page.data or [{}])[0] or {}).get("content") or "")
+            text = html_to_text(entry.get("content") or "")
             for gstin in names.find_gstins(text):
                 if gstin in gstins:
                     continue
@@ -438,8 +481,9 @@ class Pipeline:
             if gstins:
                 break
         if not gstins and not any(p["status"] == FOUND for p in pages):
+            why = "; ".join(f"{p['url']}: {p['error'] or p['status']}" for p in pages)
             return {"status": "UNAVAILABLE", "pages": pages, "gstins": [],
-                    "missing": f"the vendor's website ({domain}) could not be fetched"}
+                    "missing": f"the vendor's website could not be read ({why})"}
 
         checked = []
         for gstin in gstins[:2]:
@@ -510,9 +554,11 @@ class Pipeline:
         mcfg = self.cfg["media"]
         term_patterns = [(term.strip(), re.compile(r"\b" + re.escape(term.strip().lower()) + r"\b"))
                          for term in mcfg["adverse_terms"]]
+        term_patterns += [(term, re.compile(re.escape(term))) for term in mcfg.get("adverse_terms_hi", [])]
         victim_markers = [marker.lower() for marker in mcfg.get("victim_context", [])]
         enr, ident, req = self.out("enrich") or {}, self.out("identify") or {}, self.out("take_request")
-        if ident.get("status") not in ("RESOLVED", "AMBIGUOUS"):
+        if ident.get("status") not in ("RESOLVED", "AMBIGUOUS") or \
+                (ident.get("status") == "AMBIGUOUS" and ident.get("by") == "name"):
             return {"status": "SKIPPED", "reason": "identity not resolved: news about the matched name "
                                                    "could be about a different firm"}
         company = enr.get("name") or (ident.get("top") or {}).get("name") or req.get("name")
@@ -543,7 +589,8 @@ class Pipeline:
             blob = f"{r.get('title') or ''}. {r.get('snippet') or ''}"
             sentences = [s for s in re.split(r"(?<=[.!?])\s+|\n", blob) if s.strip()]
             published = r.get("date") or r.get("published_date") or r.get("publish_date")   # not given live
-            is_victim = any(marker in blob.lower() for marker in victim_markers)
+            is_victim = any(marker in blob.lower() for marker in victim_markers) or \
+                re.search(r"\bfake\s+(?:\w+\s+){0,2}" + re.escape(names.search_name(company).lower()), blob.lower())
             for kind, subject in subjects:
                 # The adverse word must sit in the SAME sentence as the name, as a whole word:
                 # "by default", or "fraud" two sentences away from the name, is not news about them.
