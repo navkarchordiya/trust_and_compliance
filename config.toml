@@ -75,7 +75,9 @@ adverse_terms_hi = ["गिरफ्तार", "धोखाधड़ी", "घ
 website_paths = [""]           # homepage only: big firms rarely print a GSTIN (checked live), so keep it cheap
 try_www_first = true           # seen live: https://delhivery.com fails (certificate) while https://www.delhivery.com works
 max_pages = 1
-provider = "cashfree"          # "cashfree" or "none"; needs CASHFREE_CLIENT_ID / CASHFREE_CLIENT_SECRET
+# Off until there are production keys: the sandbox returns canned test answers, and a registry answer
+# can be a strong red flag, so sandbox data must never decide a real vendor (mock data is for tests only).
+provider = "none"              # "cashfree" or "none"; cashfree needs CASHFREE_CLIENT_ID / CASHFREE_CLIENT_SECRET
 cashfree_base_url = "https://sandbox.cashfree.com/verification"   # production: https://api.cashfree.com/verification
 min_legal_name_similarity = 0.6
 

@@ -133,6 +133,9 @@ What we tried, what works, and what comes next. (The guide: "They are the heart 
 ## Declared before 10:15
 
 TODO before submitting: list anything written before 10:15 (code, prompts, notes), or write "Nothing".
+- GST registry provider switched off (`[registry] provider = "none"`): the configured Cashfree URL
+  is the sandbox, whose canned answers could become strong red flags on real vendors. GSTINs still
+  get the offline check-digit test; the registry check is "cannot verify" until production keys exist.
 
 ## Next
 

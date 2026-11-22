@@ -109,6 +109,12 @@ class TestAdverseMatching(Base):
 
 
 class TestRegistry(Base):
+    def setUp(self):
+        super().setUp()
+        # These tests exercise the registry logic against a fake provider, so they switch the
+        # provider on themselves; the shipped config keeps it off until there are production keys.
+        self.cfg["registry"]["provider"] = "cashfree"
+
     def site(self, gstin):
         return {"https://www.acmefreight.in": f"<footer>Acme Freight Private Limited · GSTIN: {gstin}</footer>"}
 
