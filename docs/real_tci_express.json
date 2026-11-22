@@ -1,0 +1,468 @@
+{
+  "job_id": "real_tci_express",
+  "request": {
+    "name": "TCI Express Limited",
+    "website": "tciexpress.in"
+  },
+  "stage": "done",
+  "status": "pending_approval",
+  "verdict": "REAL_AND_TRADING",
+  "summary": "TCI Express Limited looks like a real, trading business.",
+  "recommended_action": "add_to_approved_vendors",
+  "approval": {
+    "status": "pending",
+    "decided_by": null,
+    "decided_action": null,
+    "decided_at": null,
+    "override_reason": null
+  },
+  "who_runs_it": [
+    {
+      "name": "vk Rai mumbai",
+      "title": "Chief Administrative Officer",
+      "current_title": "Senior Territory Manager",
+      "since": "2001-02-01",
+      "location": "Mumbai, Maharashtra, India",
+      "confirmed": true
+    },
+    {
+      "name": "Shivi Suri",
+      "title": "Chief Operating Officer - Air Cargo (International & Domestic)",
+      "current_title": "Chief Operating Officer - Air Cargo (International & Domestic)",
+      "since": "2025-07-01",
+      "location": "Gurugram, Haryana, India",
+      "confirmed": true
+    },
+    {
+      "name": "Mukti Lal",
+      "title": "Executive Director & CFO",
+      "current_title": "Executive Director & CFO",
+      "since": "2025-05-01",
+      "location": "Gurgaon, Haryana, India",
+      "confirmed": true
+    }
+  ],
+  "how_long_it_has_existed": {
+    "year_founded": 1996,
+    "domain_registered": "2014-02-28T12:37:13.349Z",
+    "domain_age_days": 4649,
+    "earliest_founder_start": null
+  },
+  "is_trading": [
+    "Website tciexpress.in is registered to TCI EXPRESS LIMITED (domain registry).",
+    "Company record status: active.",
+    "1773 employees visible on the company record.",
+    "10 news articles on the company record, latest 2026-11-10.",
+    "Hiring: 10 job listings on record; latest 'Facility Maintenance supervisor', posted 2026-11-12.",
+    "Active now: newest dated record is a job posting 'Facility Maintenance supervisor' from 2026-11-12 (10 days before this check).",
+    "Run by: Shivi Suri (Chief Operating Officer - Air Cargo (International & Domestic)), Mukti Lal (Executive Director & CFO), confirmed on their own profiles.",
+    "Also works there: vk Rai mumbai (Senior Territory Manager), confirmed on their own profiles."
+  ],
+  "looks_off": {
+    "strong": [],
+    "adverse_news": [],
+    "needs_review": [],
+    "weak": []
+  },
+  "namesakes_cleared": [],
+  "cannot_verify": [
+    "GST registration: no GSTIN found on the vendor's website; ask the vendor for it."
+  ],
+  "registry": [],
+  "latest_activity": {
+    "date": "2026-11-12",
+    "what": "job posting 'Facility Maintenance supervisor'",
+    "days_before_check": 10
+  },
+  "facts": [
+    {
+      "id": 1,
+      "claim": "Company record matched to the request",
+      "value": "TCI Express Ltd.",
+      "source": "https://api.crustdata.com/company/identify",
+      "field_or_passage": "[0].matches[0].company_data.basic_info.name",
+      "quote": "\"TCI Express Ltd.\"",
+      "record_date": null,
+      "retrieved_at": "2026-11-22T08:27:53+00:00",
+      "raw_response": "call #2",
+      "call_id": 2
+    },
+    {
+      "id": 2,
+      "claim": "Primary domain on the company record",
+      "value": "tciexpress.in",
+      "source": "https://api.crustdata.com/company/identify",
+      "field_or_passage": "[0].matches[0].company_data.basic_info.primary_domain",
+      "quote": "\"tciexpress.in\"",
+      "record_date": null,
+      "retrieved_at": "2026-11-22T08:27:53+00:00",
+      "raw_response": "call #2",
+      "call_id": 2
+    },
+    {
+      "id": 3,
+      "claim": "Match confidence",
+      "value": 1.0,
+      "source": "https://api.crustdata.com/company/identify",
+      "field_or_passage": "[0].matches[0].confidence_score",
+      "quote": "1.0",
+      "record_date": null,
+      "retrieved_at": "2026-11-22T08:27:53+00:00",
+      "raw_response": "call #2",
+      "call_id": 2
+    },
+    {
+      "id": 4,
+      "claim": "Company name",
+      "value": "TCI Express Ltd.",
+      "source": "https://api.crustdata.com/company/enrich",
+      "field_or_passage": "[0].matches[0].company_data.basic_info.name",
+      "quote": "\"TCI Express Ltd.\"",
+      "record_date": null,
+      "retrieved_at": "2026-11-22T08:27:53+00:00",
+      "raw_response": "call #4",
+      "call_id": 4
+    },
+    {
+      "id": 5,
+      "claim": "Website",
+      "value": "http://www.tciexpress.in/",
+      "source": "https://api.crustdata.com/company/enrich",
+      "field_or_passage": "[0].matches[0].company_data.basic_info.website",
+      "quote": "\"http://www.tciexpress.in/\"",
+      "record_date": null,
+      "retrieved_at": "2026-11-22T08:27:53+00:00",
+      "raw_response": "call #4",
+      "call_id": 4
+    },
+    {
+      "id": 6,
+      "claim": "Company status on the record",
+      "value": "active",
+      "source": "https://api.crustdata.com/company/enrich",
+      "field_or_passage": "[0].matches[0].company_data.basic_info.status",
+      "quote": "\"active\"",
+      "record_date": null,
+      "retrieved_at": "2026-11-22T08:27:53+00:00",
+      "raw_response": "call #4",
+      "call_id": 4
+    },
+    {
+      "id": 7,
+      "claim": "Year founded",
+      "value": 1996,
+      "source": "https://api.crustdata.com/company/enrich",
+      "field_or_passage": "[0].matches[0].company_data.basic_info.year_founded",
+      "quote": "1996",
+      "record_date": null,
+      "retrieved_at": "2026-11-22T08:27:53+00:00",
+      "raw_response": "call #4",
+      "call_id": 4
+    },
+    {
+      "id": 8,
+      "claim": "Company type",
+      "value": "Public Company",
+      "source": "https://api.crustdata.com/company/enrich",
+      "field_or_passage": "[0].matches[0].company_data.basic_info.company_type",
+      "quote": "\"Public Company\"",
+      "record_date": null,
+      "retrieved_at": "2026-11-22T08:27:53+00:00",
+      "raw_response": "call #4",
+      "call_id": 4
+    },
+    {
+      "id": 9,
+      "claim": "Employee headcount",
+      "value": 1773,
+      "source": "https://api.crustdata.com/company/enrich",
+      "field_or_passage": "[0].matches[0].company_data.headcount.total",
+      "quote": "1773",
+      "record_date": null,
+      "retrieved_at": "2026-11-22T08:27:53+00:00",
+      "raw_response": "call #4",
+      "call_id": 4
+    },
+    {
+      "id": 10,
+      "claim": "Headcount growth, year on year (%)",
+      "value": 16.721527320605663,
+      "source": "https://api.crustdata.com/company/enrich",
+      "field_or_passage": "[0].matches[0].company_data.headcount.growth_percent.yoy",
+      "quote": "16.721527320605663",
+      "record_date": null,
+      "retrieved_at": "2026-11-22T08:27:53+00:00",
+      "raw_response": "call #4",
+      "call_id": 4
+    },
+    {
+      "id": 11,
+      "claim": "Employee count range",
+      "value": "1001-5000",
+      "source": "https://api.crustdata.com/company/enrich",
+      "field_or_passage": "[0].matches[0].company_data.basic_info.employee_count_range",
+      "quote": "\"1001-5000\"",
+      "record_date": null,
+      "retrieved_at": "2026-11-22T08:27:53+00:00",
+      "raw_response": "call #4",
+      "call_id": 4
+    },
+    {
+      "id": 12,
+      "claim": "Headquarters",
+      "value": "Basai Road, Shivaji Nagar (Gurgaon), Gurgaon Kty., Urban Estate (Gurgaon), Khandsa Road, Gurgaon Sector 17, Mini Sectt., New Colony (Gurgaon), Arjun Nagar, Gurgaon South City I, Gurgaon H.O, Haryana, India",
+      "source": "https://api.crustdata.com/company/enrich",
+      "field_or_passage": "[0].matches[0].company_data.locations.headquarters",
+      "quote": "\"Basai Road, Shivaji Nagar (Gurgaon), Gurgaon Kty., Urban Estate (Gurgaon), Khandsa Road, Gurgaon Sector 17, Mini Sectt., New Colony (Gurgaon), Arjun Nagar, Gurgaon South City I, Gurgaon H.O, Haryana, India\"",
+      "record_date": null,
+      "retrieved_at": "2026-11-22T08:27:53+00:00",
+      "raw_response": "call #4",
+      "call_id": 4
+    },
+    {
+      "id": 13,
+      "claim": "Headquarters country",
+      "value": "IND",
+      "source": "https://api.crustdata.com/company/enrich",
+      "field_or_passage": "[0].matches[0].company_data.locations.country",
+      "quote": "\"IND\"",
+      "record_date": null,
+      "retrieved_at": "2026-11-22T08:27:53+00:00",
+      "raw_response": "call #4",
+      "call_id": 4
+    },
+    {
+      "id": 14,
+      "claim": "Listed among the company's cxos",
+      "value": "vk Rai mumbai",
+      "source": "https://api.crustdata.com/company/enrich",
+      "field_or_passage": "[0].matches[0].company_data.people.cxos[0].basic_profile.name",
+      "quote": "\"vk Rai mumbai\"",
+      "record_date": null,
+      "retrieved_at": "2026-11-22T08:27:53+00:00",
+      "raw_response": "call #4",
+      "call_id": 4
+    },
+    {
+      "id": 15,
+      "claim": "vk Rai mumbai's own profile: start date in the current job",
+      "value": "2001-02-01T00:00:00.000Z",
+      "source": "https://www.linkedin.com/in/vk-rai-mumbai-9851a179",
+      "field_or_passage": "[0].matches[0].company_data.people.cxos[0].experience.employment_details.current[0].employee_start_date",
+      "quote": "\"2001-02-01T00:00:00.000Z\"",
+      "record_date": null,
+      "retrieved_at": "2026-11-22T08:27:53+00:00",
+      "raw_response": "call #4",
+      "call_id": 4
+    },
+    {
+      "id": 16,
+      "claim": "vk Rai mumbai's own profile: current employer",
+      "value": "tci express limited",
+      "source": "https://www.linkedin.com/in/vk-rai-mumbai-9851a179",
+      "field_or_passage": "[0].matches[0].company_data.people.cxos[0].experience.employment_details.current[0].employer_name",
+      "quote": "\"tci express limited\"",
+      "record_date": null,
+      "retrieved_at": "2026-11-22T08:27:53+00:00",
+      "raw_response": "call #4",
+      "call_id": 4
+    },
+    {
+      "id": 17,
+      "claim": "vk Rai mumbai's own profile: current title",
+      "value": "Senior Territory Manager",
+      "source": "https://www.linkedin.com/in/vk-rai-mumbai-9851a179",
+      "field_or_passage": "[0].matches[0].company_data.people.cxos[0].experience.employment_details.current[0].employee_title",
+      "quote": "\"Senior Territory Manager\"",
+      "record_date": null,
+      "retrieved_at": "2026-11-22T08:27:53+00:00",
+      "raw_response": "call #4",
+      "call_id": 4
+    },
+    {
+      "id": 18,
+      "claim": "Listed among the company's cxos",
+      "value": "Shivi Suri",
+      "source": "https://api.crustdata.com/company/enrich",
+      "field_or_passage": "[0].matches[0].company_data.people.cxos[1].basic_profile.name",
+      "quote": "\"Shivi Suri\"",
+      "record_date": null,
+      "retrieved_at": "2026-11-22T08:27:53+00:00",
+      "raw_response": "call #4",
+      "call_id": 4
+    },
+    {
+      "id": 19,
+      "claim": "Shivi Suri's own profile: start date in the current job",
+      "value": "2025-07-01T00:00:00.000Z",
+      "source": "https://www.linkedin.com/in/shivisuri",
+      "field_or_passage": "[0].matches[0].company_data.people.cxos[1].experience.employment_details.current[0].employee_start_date",
+      "quote": "\"2025-07-01T00:00:00.000Z\"",
+      "record_date": null,
+      "retrieved_at": "2026-11-22T08:27:53+00:00",
+      "raw_response": "call #4",
+      "call_id": 4
+    },
+    {
+      "id": 20,
+      "claim": "Shivi Suri's own profile: current employer",
+      "value": "TCI Express Ltd.",
+      "source": "https://www.linkedin.com/in/shivisuri",
+      "field_or_passage": "[0].matches[0].company_data.people.cxos[1].experience.employment_details.current[0].employer_name",
+      "quote": "\"TCI Express Ltd.\"",
+      "record_date": null,
+      "retrieved_at": "2026-11-22T08:27:53+00:00",
+      "raw_response": "call #4",
+      "call_id": 4
+    },
+    {
+      "id": 21,
+      "claim": "Shivi Suri's own profile: current title",
+      "value": "Chief Operating Officer - Air Cargo (International & Domestic)",
+      "source": "https://www.linkedin.com/in/shivisuri",
+      "field_or_passage": "[0].matches[0].company_data.people.cxos[1].experience.employment_details.current[0].employee_title",
+      "quote": "\"Chief Operating Officer - Air Cargo (International & Domestic)\"",
+      "record_date": null,
+      "retrieved_at": "2026-11-22T08:27:53+00:00",
+      "raw_response": "call #4",
+      "call_id": 4
+    },
+    {
+      "id": 22,
+      "claim": "Listed among the company's cxos",
+      "value": "Mukti Lal",
+      "source": "https://api.crustdata.com/company/enrich",
+      "field_or_passage": "[0].matches[0].company_data.people.cxos[2].basic_profile.name",
+      "quote": "\"Mukti Lal\"",
+      "record_date": null,
+      "retrieved_at": "2026-11-22T08:27:53+00:00",
+      "raw_response": "call #4",
+      "call_id": 4
+    },
+    {
+      "id": 23,
+      "claim": "Mukti Lal's own profile: start date in the current job",
+      "value": "2025-05-01T00:00:00.000Z",
+      "source": "https://www.linkedin.com/in/mukti-lal",
+      "field_or_passage": "[0].matches[0].company_data.people.cxos[2].experience.employment_details.current[0].employee_start_date",
+      "quote": "\"2025-05-01T00:00:00.000Z\"",
+      "record_date": null,
+      "retrieved_at": "2026-11-22T08:27:53+00:00",
+      "raw_response": "call #4",
+      "call_id": 4
+    },
+    {
+      "id": 24,
+      "claim": "Mukti Lal's own profile: current employer",
+      "value": "TCI Express Ltd.",
+      "source": "https://www.linkedin.com/in/mukti-lal",
+      "field_or_passage": "[0].matches[0].company_data.people.cxos[2].experience.employment_details.current[0].employer_name",
+      "quote": "\"TCI Express Ltd.\"",
+      "record_date": null,
+      "retrieved_at": "2026-11-22T08:27:53+00:00",
+      "raw_response": "call #4",
+      "call_id": 4
+    },
+    {
+      "id": 25,
+      "claim": "Mukti Lal's own profile: current title",
+      "value": "Executive Director & CFO",
+      "source": "https://www.linkedin.com/in/mukti-lal",
+      "field_or_passage": "[0].matches[0].company_data.people.cxos[2].experience.employment_details.current[0].employee_title",
+      "quote": "\"Executive Director & CFO\"",
+      "record_date": null,
+      "retrieved_at": "2026-11-22T08:27:53+00:00",
+      "raw_response": "call #4",
+      "call_id": 4
+    },
+    {
+      "id": 26,
+      "claim": "Most recent news article on the company record",
+      "value": "TCI Express Q2FY27 results: PAT up 8.6%, guides 13%+ margins for H2",
+      "source": "https://api.crustdata.com/company/enrich",
+      "field_or_passage": "[0].matches[0].company_data.news[0].article_title",
+      "quote": "\"TCI Express Q2FY27 results: PAT up 8.6%, guides 13%+ margins for H2\"",
+      "record_date": "2026-11-10",
+      "retrieved_at": "2026-11-22T08:27:53+00:00",
+      "raw_response": "call #4",
+      "call_id": 4
+    },
+    {
+      "id": 27,
+      "claim": "Job posted by the company on 2026-11-12",
+      "value": "Facility Maintenance supervisor",
+      "source": "https://api.crustdata.com/job/search",
+      "field_or_passage": "job_listings[0].title",
+      "quote": "\"Facility Maintenance supervisor\"",
+      "record_date": "2026-11-12T09:12:36",
+      "retrieved_at": "2026-11-22T08:27:53+00:00",
+      "raw_response": "call #6",
+      "call_id": 6
+    },
+    {
+      "id": 28,
+      "claim": "Job posted by the company on 2026-11-05",
+      "value": "HR Assistant Manager",
+      "source": "https://api.crustdata.com/job/search",
+      "field_or_passage": "job_listings[1].title",
+      "quote": "\"HR Assistant Manager\"",
+      "record_date": "2026-11-05T11:37:47",
+      "retrieved_at": "2026-11-22T08:27:53+00:00",
+      "raw_response": "call #6",
+      "call_id": 6
+    },
+    {
+      "id": 29,
+      "claim": "Job posted by the company on 2026-11-05",
+      "value": "Customer Care Team Leader",
+      "source": "https://api.crustdata.com/job/search",
+      "field_or_passage": "job_listings[2].title",
+      "quote": "\"Customer Care Team Leader\"",
+      "record_date": "2026-11-05T11:24:26",
+      "retrieved_at": "2026-11-22T08:27:53+00:00",
+      "raw_response": "call #6",
+      "call_id": 6
+    },
+    {
+      "id": 30,
+      "claim": "Domain tciexpress.in registration date",
+      "value": "2014-02-28T12:37:13.349Z",
+      "source": "https://rdap.org/domain/tciexpress.in",
+      "field_or_passage": "events[0].eventDate",
+      "quote": "\"2014-02-28T12:37:13.349Z\"",
+      "record_date": "2014-02-28T12:37:13.349Z",
+      "retrieved_at": "2026-11-22T08:27:53+00:00",
+      "raw_response": "call #8",
+      "call_id": 8
+    },
+    {
+      "id": 31,
+      "claim": "Organisation the domain tciexpress.in is registered to",
+      "value": "TCI EXPRESS LIMITED",
+      "source": "https://rdap.org/domain/tciexpress.in",
+      "field_or_passage": "entities[0].vcardArray[1][1][3]",
+      "quote": "\"TCI EXPRESS LIMITED\"",
+      "record_date": null,
+      "retrieved_at": "2026-11-22T08:27:53+00:00",
+      "raw_response": "call #8",
+      "call_id": 8
+    }
+  ],
+  "cost": {
+    "crustdata_credits": 4.29,
+    "credits_estimated_not_reported": 0.0,
+    "credit_limit": 40,
+    "inr": 34.32,
+    "inr_per_credit_assumed": 8.0,
+    "calls": 6,
+    "by_endpoint": {
+      "/company/identify": 0.2,
+      "/company/enrich": 2.0,
+      "/job/search": 0.09,
+      "rdap": 0.0,
+      "/web/enrich/live": 1.0,
+      "/web/search/live": 1.0
+    },
+    "elapsed_s": 0.0
+  }
+}

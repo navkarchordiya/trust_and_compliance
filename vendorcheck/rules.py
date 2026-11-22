@@ -340,6 +340,10 @@ def decide(cfg: dict, o: dict) -> dict:
             verdict = "HOLD_FOR_REVIEW"
             review.append("Identified by name only (no website matched): the evidence looks good, but a person "
                           "must confirm the vendor's website before approving.")
+    elif len(weak) >= cfg["verdict"].get("weak_signals_for_review", 2):
+        # Several independent small doubts about a known firm (seen live: Ecom Express after its sale to
+        # Delhivery: website registered to the buyer, expired certificate) are a question for a person.
+        verdict = "HOLD_FOR_REVIEW"
     else:
         verdict = "CANNOT_VERIFY" if cannot else "HOLD_FOR_REVIEW"
 

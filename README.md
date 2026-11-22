@@ -5,7 +5,7 @@ website, it decides whether the vendor is a **real, trading business**, says **w
 **how long it has existed** and **anything that looks off**, then screens the people who run it
 against the news and **clears innocent namesakes** (themes 5.1 Vendor Check + 5.2 Adverse Media Screen).
 
-**Quick look:** [sample output](docs/sample_output.txt) (mock data) · [review app](#review-app-the-compliance-teams-screen) ·
+**Quick look:** real-data results for [TCI Express](docs/real_tci_express.txt) (approved) and [Ecom Express](docs/real_ecom_express.txt) (held: website registered to Delhivery, its buyer) · [sample output](docs/sample_output.txt) (mock data) · [review app](#review-app-the-compliance-teams-screen) ·
 [finance](FINANCE.md) · [demo playbook](DEMO.md) · [architecture](ARCHITECTURE.md) · [build notes](NOTES.md)
 
 ## The job, and who pays for it today
@@ -38,7 +38,7 @@ date where the source gives one (article date, domain registration, GST registra
 |---|---|---|
 | `REAL_AND_TRADING` | Identity resolved, someone confirmed running it, evidence it operates, **a dated record from the last 180 days** (a job posting, or news naming the firm), no strong red flag | add to approved vendors |
 | `FRONT_SUSPECTED` | ≥ 2 independent strong red flags, each with a source | reject vendor |
-| `HOLD_FOR_REVIEW` | One strong red flag, adverse news linked to the vendor, a duplicate, or an ambiguous identity | manual review |
+| `HOLD_FOR_REVIEW` | One strong red flag, adverse news linked to the vendor, a duplicate, an ambiguous identity, or two weak signals on a known firm | manual review |
 | `CANNOT_VERIFY` | A key question has no source (no record, timeout, budget). The output names what is missing | manual review |
 
 The result also lists: who runs it (confirmed on their own profile or not, and any directors the vendor

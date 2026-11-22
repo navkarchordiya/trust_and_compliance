@@ -1,0 +1,468 @@
+{
+  "job_id": "real_ecom_express",
+  "request": {
+    "name": "Ecom Express Private Limited",
+    "website": "ecomexpress.in"
+  },
+  "stage": "done",
+  "status": "pending_approval",
+  "verdict": "HOLD_FOR_REVIEW",
+  "summary": "Ecom Express Private Limited needs a person to review: Website ecomexpress.in is registered to 'Delhivery Limited', not to Ecom Express Private Limited: a parent company, an acquirer, or someone else. Confirm who you will pay; The website ecomexpress.in has an expired security certificate: it may no longer be maintained (seen on brands absorbed into other companies).",
+  "recommended_action": "manual_review",
+  "approval": {
+    "status": "pending",
+    "decided_by": null,
+    "decided_action": null,
+    "decided_at": null,
+    "override_reason": null
+  },
+  "who_runs_it": [
+    {
+      "name": "ANIL ATRI",
+      "title": "Co-Founder",
+      "current_title": "Co-Founder",
+      "since": "2012-04-01",
+      "location": "Greater Delhi Area",
+      "confirmed": true
+    },
+    {
+      "name": "K Satyanarayana",
+      "title": "Co-Founder & Director",
+      "current_title": "Co-Founder & Director",
+      "since": "2013-01-01",
+      "location": "South Delhi, Delhi, India",
+      "confirmed": true
+    },
+    {
+      "name": "Speedesh .",
+      "title": "Chief Delivery Officer",
+      "current_title": "Chief Delivery Officer",
+      "since": "2022-11-01",
+      "location": "Gurugram, Haryana, India",
+      "confirmed": true
+    }
+  ],
+  "how_long_it_has_existed": {
+    "year_founded": 2012,
+    "domain_registered": "2012-09-08T06:34:36.599Z",
+    "domain_age_days": 5188,
+    "earliest_founder_start": "2012-04-01"
+  },
+  "is_trading": [
+    "Company record status: active.",
+    "13088 employees visible on the company record.",
+    "10 news articles on the company record, latest 2026-10-31.",
+    "Active now: newest dated record is a news article 'Delhivery sub Ecom Express gets ₹1.78 Cr GST demand from UP authority' from 2026-10-29 (24 days before this check).",
+    "Run by: ANIL ATRI (Co-Founder), K Satyanarayana (Co-Founder & Director), Speedesh . (Chief Delivery Officer), confirmed on their own profiles."
+  ],
+  "looks_off": {
+    "strong": [],
+    "adverse_news": [],
+    "needs_review": [],
+    "weak": [
+      "Website ecomexpress.in is registered to 'Delhivery Limited', not to Ecom Express Private Limited: a parent company, an acquirer, or someone else. Confirm who you will pay.",
+      "The website ecomexpress.in has an expired security certificate: it may no longer be maintained (seen on brands absorbed into other companies)."
+    ]
+  },
+  "namesakes_cleared": [],
+  "cannot_verify": [
+    "GST registration: the vendor's website could not be read (https://www.ecomexpress.in: URL navigation failed: net::ERR_CERT_DATE_INVALID; https://ecomexpress.in: URL navigation failed: net::ERR_CERT_DATE_INVALID)."
+  ],
+  "registry": [],
+  "latest_activity": {
+    "date": "2026-10-29",
+    "what": "news article 'Delhivery sub Ecom Express gets ₹1.78 Cr GST demand from UP authority'",
+    "days_before_check": 24
+  },
+  "facts": [
+    {
+      "id": 32,
+      "claim": "Company record matched to the request",
+      "value": "Ecom Express Limited",
+      "source": "https://api.crustdata.com/company/identify",
+      "field_or_passage": "[0].matches[0].company_data.basic_info.name",
+      "quote": "\"Ecom Express Limited\"",
+      "record_date": null,
+      "retrieved_at": "2026-11-22T08:27:53+00:00",
+      "raw_response": "call #14",
+      "call_id": 14
+    },
+    {
+      "id": 33,
+      "claim": "Primary domain on the company record",
+      "value": "ecomexpress.in",
+      "source": "https://api.crustdata.com/company/identify",
+      "field_or_passage": "[0].matches[0].company_data.basic_info.primary_domain",
+      "quote": "\"ecomexpress.in\"",
+      "record_date": null,
+      "retrieved_at": "2026-11-22T08:27:53+00:00",
+      "raw_response": "call #14",
+      "call_id": 14
+    },
+    {
+      "id": 34,
+      "claim": "Match confidence",
+      "value": 1.0,
+      "source": "https://api.crustdata.com/company/identify",
+      "field_or_passage": "[0].matches[0].confidence_score",
+      "quote": "1.0",
+      "record_date": null,
+      "retrieved_at": "2026-11-22T08:27:53+00:00",
+      "raw_response": "call #14",
+      "call_id": 14
+    },
+    {
+      "id": 35,
+      "claim": "Company name",
+      "value": "Ecom Express Limited",
+      "source": "https://api.crustdata.com/company/enrich",
+      "field_or_passage": "[0].matches[0].company_data.basic_info.name",
+      "quote": "\"Ecom Express Limited\"",
+      "record_date": null,
+      "retrieved_at": "2026-11-22T08:27:53+00:00",
+      "raw_response": "call #16",
+      "call_id": 16
+    },
+    {
+      "id": 36,
+      "claim": "Website",
+      "value": "http://www.ecomexpress.in",
+      "source": "https://api.crustdata.com/company/enrich",
+      "field_or_passage": "[0].matches[0].company_data.basic_info.website",
+      "quote": "\"http://www.ecomexpress.in\"",
+      "record_date": null,
+      "retrieved_at": "2026-11-22T08:27:53+00:00",
+      "raw_response": "call #16",
+      "call_id": 16
+    },
+    {
+      "id": 37,
+      "claim": "Company status on the record",
+      "value": "active",
+      "source": "https://api.crustdata.com/company/enrich",
+      "field_or_passage": "[0].matches[0].company_data.basic_info.status",
+      "quote": "\"active\"",
+      "record_date": null,
+      "retrieved_at": "2026-11-22T08:27:53+00:00",
+      "raw_response": "call #16",
+      "call_id": 16
+    },
+    {
+      "id": 38,
+      "claim": "Year founded",
+      "value": 2012,
+      "source": "https://api.crustdata.com/company/enrich",
+      "field_or_passage": "[0].matches[0].company_data.basic_info.year_founded",
+      "quote": "2012",
+      "record_date": null,
+      "retrieved_at": "2026-11-22T08:27:53+00:00",
+      "raw_response": "call #16",
+      "call_id": 16
+    },
+    {
+      "id": 39,
+      "claim": "Company type",
+      "value": "Privately Held",
+      "source": "https://api.crustdata.com/company/enrich",
+      "field_or_passage": "[0].matches[0].company_data.basic_info.company_type",
+      "quote": "\"Privately Held\"",
+      "record_date": null,
+      "retrieved_at": "2026-11-22T08:27:53+00:00",
+      "raw_response": "call #16",
+      "call_id": 16
+    },
+    {
+      "id": 40,
+      "claim": "Employee headcount",
+      "value": 13088,
+      "source": "https://api.crustdata.com/company/enrich",
+      "field_or_passage": "[0].matches[0].company_data.headcount.total",
+      "quote": "13088",
+      "record_date": null,
+      "retrieved_at": "2026-11-22T08:27:53+00:00",
+      "raw_response": "call #16",
+      "call_id": 16
+    },
+    {
+      "id": 41,
+      "claim": "Headcount growth, year on year (%)",
+      "value": 0.5918069325954961,
+      "source": "https://api.crustdata.com/company/enrich",
+      "field_or_passage": "[0].matches[0].company_data.headcount.growth_percent.yoy",
+      "quote": "0.5918069325954961",
+      "record_date": null,
+      "retrieved_at": "2026-11-22T08:27:53+00:00",
+      "raw_response": "call #16",
+      "call_id": 16
+    },
+    {
+      "id": 42,
+      "claim": "Employee count range",
+      "value": "10001+",
+      "source": "https://api.crustdata.com/company/enrich",
+      "field_or_passage": "[0].matches[0].company_data.basic_info.employee_count_range",
+      "quote": "\"10001+\"",
+      "record_date": null,
+      "retrieved_at": "2026-11-22T08:27:53+00:00",
+      "raw_response": "call #16",
+      "call_id": 16
+    },
+    {
+      "id": 43,
+      "claim": "Headquarters",
+      "value": "DLF QE, Haryāna, India",
+      "source": "https://api.crustdata.com/company/enrich",
+      "field_or_passage": "[0].matches[0].company_data.locations.headquarters",
+      "quote": "\"DLF QE, Hary\\u0101na, India\"",
+      "record_date": null,
+      "retrieved_at": "2026-11-22T08:27:53+00:00",
+      "raw_response": "call #16",
+      "call_id": 16
+    },
+    {
+      "id": 44,
+      "claim": "Headquarters country",
+      "value": "IND",
+      "source": "https://api.crustdata.com/company/enrich",
+      "field_or_passage": "[0].matches[0].company_data.locations.country",
+      "quote": "\"IND\"",
+      "record_date": null,
+      "retrieved_at": "2026-11-22T08:27:53+00:00",
+      "raw_response": "call #16",
+      "call_id": 16
+    },
+    {
+      "id": 45,
+      "claim": "Listed among the company's founders",
+      "value": "ANIL ATRI",
+      "source": "https://api.crustdata.com/company/enrich",
+      "field_or_passage": "[0].matches[0].company_data.people.founders[0].basic_profile.name",
+      "quote": "\"ANIL ATRI\"",
+      "record_date": null,
+      "retrieved_at": "2026-11-22T08:27:53+00:00",
+      "raw_response": "call #16",
+      "call_id": 16
+    },
+    {
+      "id": 46,
+      "claim": "ANIL ATRI's own profile: start date in the current job",
+      "value": "2012-04-01T00:00:00.000Z",
+      "source": "https://www.linkedin.com/in/anil-atri-417ab610",
+      "field_or_passage": "[0].matches[0].company_data.people.founders[0].experience.employment_details.current[0].employee_start_date",
+      "quote": "\"2012-04-01T00:00:00.000Z\"",
+      "record_date": null,
+      "retrieved_at": "2026-11-22T08:27:53+00:00",
+      "raw_response": "call #16",
+      "call_id": 16
+    },
+    {
+      "id": 47,
+      "claim": "ANIL ATRI's own profile: current employer",
+      "value": "Ecom Express Limited",
+      "source": "https://www.linkedin.com/in/anil-atri-417ab610",
+      "field_or_passage": "[0].matches[0].company_data.people.founders[0].experience.employment_details.current[0].employer_name",
+      "quote": "\"Ecom Express Limited\"",
+      "record_date": null,
+      "retrieved_at": "2026-11-22T08:27:53+00:00",
+      "raw_response": "call #16",
+      "call_id": 16
+    },
+    {
+      "id": 48,
+      "claim": "ANIL ATRI's own profile: current title",
+      "value": "Co-Founder",
+      "source": "https://www.linkedin.com/in/anil-atri-417ab610",
+      "field_or_passage": "[0].matches[0].company_data.people.founders[0].experience.employment_details.current[0].employee_title",
+      "quote": "\"Co-Founder\"",
+      "record_date": null,
+      "retrieved_at": "2026-11-22T08:27:53+00:00",
+      "raw_response": "call #16",
+      "call_id": 16
+    },
+    {
+      "id": 49,
+      "claim": "Listed among the company's founders",
+      "value": "K Satyanarayana",
+      "source": "https://api.crustdata.com/company/enrich",
+      "field_or_passage": "[0].matches[0].company_data.people.founders[1].basic_profile.name",
+      "quote": "\"K Satyanarayana\"",
+      "record_date": null,
+      "retrieved_at": "2026-11-22T08:27:53+00:00",
+      "raw_response": "call #16",
+      "call_id": 16
+    },
+    {
+      "id": 50,
+      "claim": "K Satyanarayana's own profile: start date in the current job",
+      "value": "2013-01-01T00:00:00.000Z",
+      "source": "https://www.linkedin.com/in/k-satyanarayana-11905866",
+      "field_or_passage": "[0].matches[0].company_data.people.founders[1].experience.employment_details.current[0].employee_start_date",
+      "quote": "\"2013-01-01T00:00:00.000Z\"",
+      "record_date": null,
+      "retrieved_at": "2026-11-22T08:27:53+00:00",
+      "raw_response": "call #16",
+      "call_id": 16
+    },
+    {
+      "id": 51,
+      "claim": "K Satyanarayana's own profile: current employer",
+      "value": "Ecom Express Limited",
+      "source": "https://www.linkedin.com/in/k-satyanarayana-11905866",
+      "field_or_passage": "[0].matches[0].company_data.people.founders[1].experience.employment_details.current[0].employer_name",
+      "quote": "\"Ecom Express Limited\"",
+      "record_date": null,
+      "retrieved_at": "2026-11-22T08:27:53+00:00",
+      "raw_response": "call #16",
+      "call_id": 16
+    },
+    {
+      "id": 52,
+      "claim": "K Satyanarayana's own profile: current title",
+      "value": "Co-Founder & Director",
+      "source": "https://www.linkedin.com/in/k-satyanarayana-11905866",
+      "field_or_passage": "[0].matches[0].company_data.people.founders[1].experience.employment_details.current[0].employee_title",
+      "quote": "\"Co-Founder & Director\"",
+      "record_date": null,
+      "retrieved_at": "2026-11-22T08:27:53+00:00",
+      "raw_response": "call #16",
+      "call_id": 16
+    },
+    {
+      "id": 53,
+      "claim": "Listed among the company's cxos",
+      "value": "Speedesh .",
+      "source": "https://api.crustdata.com/company/enrich",
+      "field_or_passage": "[0].matches[0].company_data.people.cxos[0].basic_profile.name",
+      "quote": "\"Speedesh .\"",
+      "record_date": null,
+      "retrieved_at": "2026-11-22T08:27:53+00:00",
+      "raw_response": "call #16",
+      "call_id": 16
+    },
+    {
+      "id": 54,
+      "claim": "Speedesh .'s own profile: start date in the current job",
+      "value": "2022-11-01T00:00:00.000Z",
+      "source": "https://www.linkedin.com/in/speedesh-689794321",
+      "field_or_passage": "[0].matches[0].company_data.people.cxos[0].experience.employment_details.current[0].employee_start_date",
+      "quote": "\"2022-11-01T00:00:00.000Z\"",
+      "record_date": null,
+      "retrieved_at": "2026-11-22T08:27:53+00:00",
+      "raw_response": "call #16",
+      "call_id": 16
+    },
+    {
+      "id": 55,
+      "claim": "Speedesh .'s own profile: current employer",
+      "value": "Ecom Express Limited",
+      "source": "https://www.linkedin.com/in/speedesh-689794321",
+      "field_or_passage": "[0].matches[0].company_data.people.cxos[0].experience.employment_details.current[0].employer_name",
+      "quote": "\"Ecom Express Limited\"",
+      "record_date": null,
+      "retrieved_at": "2026-11-22T08:27:53+00:00",
+      "raw_response": "call #16",
+      "call_id": 16
+    },
+    {
+      "id": 56,
+      "claim": "Speedesh .'s own profile: current title",
+      "value": "Chief Delivery Officer",
+      "source": "https://www.linkedin.com/in/speedesh-689794321",
+      "field_or_passage": "[0].matches[0].company_data.people.cxos[0].experience.employment_details.current[0].employee_title",
+      "quote": "\"Chief Delivery Officer\"",
+      "record_date": null,
+      "retrieved_at": "2026-11-22T08:27:53+00:00",
+      "raw_response": "call #16",
+      "call_id": 16
+    },
+    {
+      "id": 57,
+      "claim": "Most recent news article on the company record",
+      "value": "Delhivery Swings To Rs 40.6 Cr Profit In Q2 FY27, Revenue Rises 19.8%",
+      "source": "https://api.crustdata.com/company/enrich",
+      "field_or_passage": "[0].matches[0].company_data.news[0].article_title",
+      "quote": "\"Delhivery Swings To Rs 40.6 Cr Profit In Q2 FY27, Revenue Rises 19.8%\"",
+      "record_date": "2026-10-31",
+      "retrieved_at": "2026-11-22T08:27:53+00:00",
+      "raw_response": "call #16",
+      "call_id": 16
+    },
+    {
+      "id": 58,
+      "claim": "Job posted by the company on 2024-07-23",
+      "value": "Data Scientist",
+      "source": "https://api.crustdata.com/job/search",
+      "field_or_passage": "job_listings[0].title",
+      "quote": "\"Data Scientist\"",
+      "record_date": "2024-07-23T00:00:00",
+      "retrieved_at": "2026-11-22T08:27:53+00:00",
+      "raw_response": "call #18",
+      "call_id": 18
+    },
+    {
+      "id": 59,
+      "claim": "Job posted by the company on 2024-07-19",
+      "value": "Software Development Engineer",
+      "source": "https://api.crustdata.com/job/search",
+      "field_or_passage": "job_listings[1].title",
+      "quote": "\"Software Development Engineer\"",
+      "record_date": "2024-07-19T00:00:00",
+      "retrieved_at": "2026-11-22T08:27:53+00:00",
+      "raw_response": "call #18",
+      "call_id": 18
+    },
+    {
+      "id": 60,
+      "claim": "Job posted by the company on 2024-07-18",
+      "value": "Supervisor",
+      "source": "https://api.crustdata.com/job/search",
+      "field_or_passage": "job_listings[2].title",
+      "quote": "\"Supervisor\"",
+      "record_date": "2024-07-18T00:00:00",
+      "retrieved_at": "2026-11-22T08:27:53+00:00",
+      "raw_response": "call #18",
+      "call_id": 18
+    },
+    {
+      "id": 61,
+      "claim": "Domain ecomexpress.in registration date",
+      "value": "2012-09-08T06:34:36.599Z",
+      "source": "https://rdap.org/domain/ecomexpress.in",
+      "field_or_passage": "events[0].eventDate",
+      "quote": "\"2012-09-08T06:34:36.599Z\"",
+      "record_date": "2012-09-08T06:34:36.599Z",
+      "retrieved_at": "2026-11-22T08:27:53+00:00",
+      "raw_response": "call #20",
+      "call_id": 20
+    },
+    {
+      "id": 62,
+      "claim": "Organisation the domain ecomexpress.in is registered to",
+      "value": "Delhivery Limited",
+      "source": "https://rdap.org/domain/ecomexpress.in",
+      "field_or_passage": "entities[0].vcardArray[1][1][3]",
+      "quote": "\"Delhivery Limited\"",
+      "record_date": null,
+      "retrieved_at": "2026-11-22T08:27:53+00:00",
+      "raw_response": "call #20",
+      "call_id": 20
+    }
+  ],
+  "cost": {
+    "crustdata_credits": 4.29,
+    "credits_estimated_not_reported": 0.0,
+    "credit_limit": 40,
+    "inr": 34.32,
+    "inr_per_credit_assumed": 8.0,
+    "calls": 7,
+    "by_endpoint": {
+      "/company/identify": 0.2,
+      "/company/enrich": 2.0,
+      "/job/search": 0.09,
+      "rdap": 0.0,
+      "/web/enrich/live": 2.0,
+      "/web/search/live": 0.0
+    },
+    "elapsed_s": 0.0
+  }
+}

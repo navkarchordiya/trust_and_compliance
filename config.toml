@@ -109,6 +109,7 @@ retention_days = 30            # `purge` deletes raw responses (people's profile
 
 [verdict]
 strong_signals_for_front = 2   # this many independent strong signals = FRONT_SUSPECTED
+weak_signals_for_review = 2    # a resolved firm with this many weak signals goes to a person (not "cannot verify")
 
 [output]
 # Fields included in the result. Add/remove here when the output format changes.
