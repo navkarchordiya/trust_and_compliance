@@ -106,7 +106,7 @@ def decide(cfg: dict, o: dict) -> dict:
         if enr.get("openings"):
             positive.append(f"{enr['openings']} open job postings.")
         if enr.get("news"):
-            positive.append(f"{len(enr['news'])} news articles on the company record, latest "
+            positive.append(f"{len(enr['news'])} news article{'s' if len(enr['news']) != 1 else ''} on the company record, latest "
                             f"{(enr['news'][0].get('date') or '')[:10]}.")
 
     # ---- registry (GST)
@@ -119,8 +119,12 @@ def decide(cfg: dict, o: dict) -> dict:
     rcfg = cfg.get("registry", {})
     for g in reg.get("gstins") or []:
         gid = g["gstin"]
+        where = "given in the request" if g.get("from") == "request" else "shown on the vendor's website"
         if not g.get("checksum_ok"):
-            strong.append(f"Invalid GSTIN on the vendor's website: {gid} fails the GSTIN check-digit test.")
+            if g.get("from") == "request":      # most likely a typo on the form: ask, do not accuse
+                review.append(f"GSTIN {gid} {where} fails the GSTIN check-digit test; ask the vendor to confirm it.")
+            else:
+                strong.append(f"Invalid GSTIN {where}: {gid} fails the GSTIN check-digit test.")
             continue
         if claimed_name and names.claims_company(claimed_name) and g.get("pan_holder_type") not in (None, "company"):
             weak.append(f"GSTIN {gid} belongs to a PAN of type '{g['pan_holder_type']}', but the name "
@@ -128,7 +132,7 @@ def decide(cfg: dict, o: dict) -> dict:
         if g.get("registry") == "FOUND":
             st = (g.get("status") or "").lower()
             if g.get("valid") is False:
-                strong.append(f"GSTIN {gid} shown on the website is not in the GST registry.")
+                strong.append(f"GSTIN {gid} {where} is not in the GST registry.")
             elif st and st != "active":
                 strong.append(f"GST registration {gid} is '{g['status']}', not active.")
             elif st == "active":
@@ -147,7 +151,7 @@ def decide(cfg: dict, o: dict) -> dict:
                             f"claimed founding year {year}.")
         elif g.get("registry") in ("NOT_CONFIGURED",) + UNANSWERED:
             cannot.append(f"GST registration {gid}: registry not checked ({g.get('why') or g['registry']}).")
-        reg_summary.append({k: g.get(k) for k in ("gstin", "checksum_ok", "pan_holder_type", "registry",
+        reg_summary.append({k: g.get(k) for k in ("gstin", "from", "checksum_ok", "pan_holder_type", "registry",
                                                     "valid", "status", "legal_name", "trade_name", "registered")})
 
     # ---- who runs it

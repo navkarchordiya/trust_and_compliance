@@ -407,12 +407,20 @@ class Pipeline:
         ident, req, rcfg = self.out("identify") or {}, self.out("take_request"), self.cfg.get("registry", {})
         domain = req.get("domain") or ((ident.get("top") or {}).get("domain")
                                        if ident.get("status") == "RESOLVED" else None)
-        pages, gstins = [], []
+        pages, gstins, origin = [], [], {}
         if req.get("gstin"):
             gstins.append(req["gstin"])          # given on the vendor's onboarding form (a claim, like the website)
+            origin[req["gstin"]] = "request"
         if not domain and not gstins:
             return {"status": "SKIPPED", "reason": "no website or GSTIN given"}
 
+        # If the run's budget is tight (e.g. a lowered cost limit), keep credits for the news search,
+        # which matters more than reading a GSTIN off the homepage.
+        reserve = self.cfg["limits"].get("reserve_credits_for_news", 1)
+        remaining = self.cfg["limits"]["max_credits_per_run"] - self.store.credits_spent(self.job_id)
+        if not gstins and domain and remaining - self.cfg["credit_estimates"]["/web/enrich/live"] < reserve:
+            return {"status": "SKIPPED_BUDGET", "gstins": [],
+                    "missing": "the homepage was not read, to keep the run's credit budget for the news check"}
         for path in ([] if gstins or not domain else rcfg.get("website_paths", [""])[: rcfg.get("max_pages", 1)]):
             url = f"https://{domain}/{path}".rstrip("/")
             page = self.cd.web_fetch(url)
@@ -424,6 +432,7 @@ class Pipeline:
                 if gstin in gstins:
                     continue
                 gstins.append(gstin)
+                origin[gstin] = "website"
                 self.ev.passage("registry", "GSTIN shown on the vendor's own website", gstin, page, text,
                                 snippet_around(text, gstin, 80), url)
             if gstins:
@@ -434,7 +443,8 @@ class Pipeline:
 
         checked = []
         for gstin in gstins[:2]:
-            item = {"gstin": gstin, "checksum_ok": names.gstin_checksum_ok(gstin),
+            item = {"gstin": gstin, "from": origin.get(gstin, "website"),
+                    "checksum_ok": names.gstin_checksum_ok(gstin),
                     "state_code": gstin[:2], "pan_holder_type": names.pan_holder_type(gstin)}
             if not item["checksum_ok"]:
                 item["registry"] = "NOT_CHECKED"

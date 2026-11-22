@@ -1,0 +1,303 @@
+{
+  "job_id": "job_sample",
+  "request": {
+    "name": "Acme Freight Pvt Ltd",
+    "website": "acmefreight.in"
+  },
+  "stage": "done",
+  "status": "pending_approval",
+  "verdict": "REAL_AND_TRADING",
+  "summary": "Acme Freight Pvt Ltd looks like a real, trading business.",
+  "recommended_action": "add_to_approved_vendors",
+  "approval": {
+    "status": "pending",
+    "decided_by": null,
+    "decided_action": null,
+    "decided_at": null,
+    "override_reason": null
+  },
+  "who_runs_it": [
+    {
+      "name": "Ravi Menon",
+      "title": "Founder & CEO",
+      "current_title": "Founder & CEO",
+      "since": "2012-01-01",
+      "location": "Pune, India",
+      "confirmed": true,
+      "why": null,
+      "current_employers": null
+    }
+  ],
+  "how_long_it_has_existed": {
+    "year_founded": 2012,
+    "domain_registered": "2011-05-04T00:00:00Z",
+    "domain_age_days": 5681,
+    "earliest_founder_start": "2012-01-01"
+  },
+  "is_trading": [
+    "Company record status: active.",
+    "140 employees visible on the company record.",
+    "6 open job postings.",
+    "1 news article on the company record, latest 2026-10-02.",
+    "Run by: Ravi Menon (Founder & CEO), confirmed on their own profiles."
+  ],
+  "looks_off": {
+    "strong": [],
+    "adverse_news": [],
+    "needs_review": [],
+    "weak": []
+  },
+  "namesakes_cleared": [
+    "Ravi Menon: Ravi Menon arrested in jewellery fraud (https://news.example/j) — article names a 'Ravi Menon' but never mentions Acme Freight Private Limited or acmefreight.in; treated as a different person (weak clearance: based on absence, a person should confirm)"
+  ],
+  "cannot_verify": [
+    "GST registration: no GSTIN found on the vendor's website; ask the vendor for it."
+  ],
+  "registry": [],
+  "facts": [
+    {
+      "id": 1,
+      "claim": "Company record matched to the request",
+      "value": "Acme Freight Private Limited",
+      "source": "https://api.crustdata.com/company/identify",
+      "field_or_passage": "[0].matches[0].company_data.basic_info.name",
+      "quote": "\"Acme Freight Private Limited\"",
+      "record_date": null,
+      "retrieved_at": "2026-11-22T07:13:13+00:00",
+      "raw_response": "call #1",
+      "call_id": 1
+    },
+    {
+      "id": 2,
+      "claim": "Primary domain on the company record",
+      "value": "acmefreight.in",
+      "source": "https://api.crustdata.com/company/identify",
+      "field_or_passage": "[0].matches[0].company_data.basic_info.primary_domain",
+      "quote": "\"acmefreight.in\"",
+      "record_date": null,
+      "retrieved_at": "2026-11-22T07:13:13+00:00",
+      "raw_response": "call #1",
+      "call_id": 1
+    },
+    {
+      "id": 3,
+      "claim": "Match confidence",
+      "value": 1.0,
+      "source": "https://api.crustdata.com/company/identify",
+      "field_or_passage": "[0].matches[0].confidence_score",
+      "quote": "1.0",
+      "record_date": null,
+      "retrieved_at": "2026-11-22T07:13:13+00:00",
+      "raw_response": "call #1",
+      "call_id": 1
+    },
+    {
+      "id": 4,
+      "claim": "Company name",
+      "value": "Acme Freight Private Limited",
+      "source": "https://api.crustdata.com/company/enrich",
+      "field_or_passage": "[0].matches[0].company_data.basic_info.name",
+      "quote": "\"Acme Freight Private Limited\"",
+      "record_date": null,
+      "retrieved_at": "2026-11-22T07:13:13+00:00",
+      "raw_response": "call #2",
+      "call_id": 2
+    },
+    {
+      "id": 5,
+      "claim": "Website",
+      "value": "https://acmefreight.in",
+      "source": "https://api.crustdata.com/company/enrich",
+      "field_or_passage": "[0].matches[0].company_data.basic_info.website",
+      "quote": "\"https://acmefreight.in\"",
+      "record_date": null,
+      "retrieved_at": "2026-11-22T07:13:13+00:00",
+      "raw_response": "call #2",
+      "call_id": 2
+    },
+    {
+      "id": 6,
+      "claim": "Company status on the record",
+      "value": "active",
+      "source": "https://api.crustdata.com/company/enrich",
+      "field_or_passage": "[0].matches[0].company_data.basic_info.status",
+      "quote": "\"active\"",
+      "record_date": null,
+      "retrieved_at": "2026-11-22T07:13:13+00:00",
+      "raw_response": "call #2",
+      "call_id": 2
+    },
+    {
+      "id": 7,
+      "claim": "Year founded",
+      "value": 2012,
+      "source": "https://api.crustdata.com/company/enrich",
+      "field_or_passage": "[0].matches[0].company_data.basic_info.year_founded",
+      "quote": "2012",
+      "record_date": null,
+      "retrieved_at": "2026-11-22T07:13:13+00:00",
+      "raw_response": "call #2",
+      "call_id": 2
+    },
+    {
+      "id": 8,
+      "claim": "Employee headcount",
+      "value": 140,
+      "source": "https://api.crustdata.com/company/enrich",
+      "field_or_passage": "[0].matches[0].company_data.headcount.total",
+      "quote": "140",
+      "record_date": null,
+      "retrieved_at": "2026-11-22T07:13:13+00:00",
+      "raw_response": "call #2",
+      "call_id": 2
+    },
+    {
+      "id": 9,
+      "claim": "Headcount growth, year on year (%)",
+      "value": 12.5,
+      "source": "https://api.crustdata.com/company/enrich",
+      "field_or_passage": "[0].matches[0].company_data.headcount.growth_percent.yoy",
+      "quote": "12.5",
+      "record_date": null,
+      "retrieved_at": "2026-11-22T07:13:13+00:00",
+      "raw_response": "call #2",
+      "call_id": 2
+    },
+    {
+      "id": 10,
+      "claim": "Employee count range",
+      "value": "51-200",
+      "source": "https://api.crustdata.com/company/enrich",
+      "field_or_passage": "[0].matches[0].company_data.basic_info.employee_count_range",
+      "quote": "\"51-200\"",
+      "record_date": null,
+      "retrieved_at": "2026-11-22T07:13:13+00:00",
+      "raw_response": "call #2",
+      "call_id": 2
+    },
+    {
+      "id": 11,
+      "claim": "Headquarters",
+      "value": "Pune, Maharashtra, India",
+      "source": "https://api.crustdata.com/company/enrich",
+      "field_or_passage": "[0].matches[0].company_data.locations.headquarters",
+      "quote": "\"Pune, Maharashtra, India\"",
+      "record_date": null,
+      "retrieved_at": "2026-11-22T07:13:13+00:00",
+      "raw_response": "call #2",
+      "call_id": 2
+    },
+    {
+      "id": 12,
+      "claim": "Headquarters country",
+      "value": "IND",
+      "source": "https://api.crustdata.com/company/enrich",
+      "field_or_passage": "[0].matches[0].company_data.locations.country",
+      "quote": "\"IND\"",
+      "record_date": null,
+      "retrieved_at": "2026-11-22T07:13:13+00:00",
+      "raw_response": "call #2",
+      "call_id": 2
+    },
+    {
+      "id": 13,
+      "claim": "Open job postings",
+      "value": 6,
+      "source": "https://api.crustdata.com/company/enrich",
+      "field_or_passage": "[0].matches[0].company_data.hiring.openings_count",
+      "quote": "6",
+      "record_date": null,
+      "retrieved_at": "2026-11-22T07:13:13+00:00",
+      "raw_response": "call #2",
+      "call_id": 2
+    },
+    {
+      "id": 14,
+      "claim": "Listed among the company's founders",
+      "value": "Ravi Menon",
+      "source": "https://api.crustdata.com/company/enrich",
+      "field_or_passage": "[0].matches[0].company_data.people.founders[0].basic_profile.name",
+      "quote": "\"Ravi Menon\"",
+      "record_date": null,
+      "retrieved_at": "2026-11-22T07:13:13+00:00",
+      "raw_response": "call #2",
+      "call_id": 2
+    },
+    {
+      "id": 15,
+      "claim": "Ravi Menon's own profile: current employer",
+      "value": "Acme Freight Private Limited",
+      "source": "https://www.linkedin.com/in/ravi-menon-acme",
+      "field_or_passage": "[0].matches[0].company_data.people.founders[0].experience.employment_details.current[0].employer_name",
+      "quote": "\"Acme Freight Private Limited\"",
+      "record_date": null,
+      "retrieved_at": "2026-11-22T07:13:13+00:00",
+      "raw_response": "call #2",
+      "call_id": 2
+    },
+    {
+      "id": 16,
+      "claim": "Ravi Menon's own profile: current title",
+      "value": "Founder & CEO",
+      "source": "https://www.linkedin.com/in/ravi-menon-acme",
+      "field_or_passage": "[0].matches[0].company_data.people.founders[0].experience.employment_details.current[0].employee_title",
+      "quote": "\"Founder & CEO\"",
+      "record_date": null,
+      "retrieved_at": "2026-11-22T07:13:13+00:00",
+      "raw_response": "call #2",
+      "call_id": 2
+    },
+    {
+      "id": 17,
+      "claim": "Most recent news article on the company record",
+      "value": "Acme Freight Private Limited opens new warehouse",
+      "source": "https://api.crustdata.com/company/enrich",
+      "field_or_passage": "[0].matches[0].company_data.news[0].article_title",
+      "quote": "\"Acme Freight Private Limited opens new warehouse\"",
+      "record_date": "2026-10-02",
+      "retrieved_at": "2026-11-22T07:13:13+00:00",
+      "raw_response": "call #2",
+      "call_id": 2
+    },
+    {
+      "id": 18,
+      "claim": "Domain acmefreight.in registration date",
+      "value": "2011-05-04T00:00:00Z",
+      "source": "https://rdap.org/domain/acmefreight.in",
+      "field_or_passage": "events[0].eventDate",
+      "quote": "\"2011-05-04T00:00:00Z\"",
+      "record_date": "2011-05-04T00:00:00Z",
+      "retrieved_at": "2026-11-22T07:13:13+00:00",
+      "raw_response": "call #3",
+      "call_id": 3
+    },
+    {
+      "id": 19,
+      "claim": "News about a namesake of Ravi Menon, not linked to the vendor",
+      "value": "Ravi Menon arrested in jewellery fraud",
+      "source": "https://news.example/j",
+      "field_or_passage": "passage",
+      "quote": "Police said Ravi Menon, who runs a jewellery shop in Jaipur, was arrested for fraud on 3 October 2026.",
+      "record_date": null,
+      "retrieved_at": "2026-11-22T07:13:13+00:00",
+      "raw_response": "call #6",
+      "call_id": 6
+    }
+  ],
+  "cost": {
+    "crustdata_credits": 5.2,
+    "credits_estimated_not_reported": 0.0,
+    "credit_limit": 40,
+    "inr": 41.6,
+    "inr_per_credit_assumed": 8.0,
+    "calls": 6,
+    "by_endpoint": {
+      "/company/identify": 0.2,
+      "/company/enrich": 2.0,
+      "rdap": 0.0,
+      "/web/enrich/live": 2.0,
+      "/web/search/live": 1.0
+    },
+    "elapsed_s": 0.0
+  }
+}

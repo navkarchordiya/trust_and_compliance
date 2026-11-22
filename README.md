@@ -5,6 +5,9 @@ website, it decides whether the vendor is a **real, trading business**, says **w
 **how long it has existed** and **anything that looks off**, then screens the people who run it
 against the news and **clears innocent namesakes** (themes 5.1 Vendor Check + 5.2 Adverse Media Screen).
 
+**Quick look:** [sample output](docs/sample_output.txt) (mock data) · [review app](#review-app-the-compliance-teams-screen) ·
+[finance](FINANCE.md) · [demo playbook](DEMO.md) · [architecture](ARCHITECTURE.md) · [build notes](NOTES.md)
+
 ## The job, and who pays for it today
 
 Before money moves to a new vendor, a compliance team or an outside verification and screening

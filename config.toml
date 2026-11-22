@@ -15,6 +15,7 @@ max_seconds_per_run = 300
 http_timeout_s = 25
 max_retries = 3                # per call, on timeout / 5xx / 429
 backoff_s = 2.0
+reserve_credits_for_news = 1   # under a tight budget, skip the homepage GSTIN read before the news search
 
 [credit_estimates]             # used only when a response has no X-Credits-Used header (ledger marks these "estimated")
 "/company/identify" = 0     # free (docs.crustdata.com/general/pricing)

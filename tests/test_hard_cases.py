@@ -312,3 +312,28 @@ class TestRescreen(Base):
         rows = rescreen(self.store, self.cfg, pipe, log=lambda m: None)
         self.assertEqual(rows[0]["now"], "REAL_AND_TRADING")
         self.assertEqual(self.store.job(rows[0]["job"])["status"], "closed")
+
+
+class TestRequirementChangeReadiness(Base):
+    def test_typo_in_request_gstin_is_a_question_not_an_accusation(self):
+        bad = VALID_GSTIN[:-1] + "A"
+        job, r = self.run_job(Fake(company()), {"name": "Acme Freight Pvt Ltd", "website": "acmefreight.in",
+                                                 "gstin": bad})
+        self.assertFalse(any("GSTIN" in s for s in r["looks_off"]["strong"]), r["looks_off"])
+        self.assertTrue(any("ask the vendor to confirm" in s for s in r["looks_off"]["needs_review"]))
+
+    def test_lower_cost_limit_keeps_the_news_check(self):
+        self.cfg["limits"]["max_credits_per_run"] = 3.2       # identify 0.2 + enrich 2 + news 1
+        news = [{"subject": "Acme Freight", "title": "Raid on Acme Freight over fake invoices",
+                 "url": "https://news.example/r", "snippet": "Officers raid Acme Freight."}]
+        fake = Fake(company(), news=news)
+        job, r = self.run_job(fake)
+        self.assertEqual(fake.count.get("/web/search/live"), 1)       # the news check still ran
+        self.assertTrue(r["looks_off"]["adverse_news"])
+        self.assertTrue(any("keep the run's credit budget" in c for c in r["cannot_verify"]))
+        self.assertLessEqual(r["cost"]["crustdata_credits"], 3.2)
+
+    def test_new_output_field_is_a_config_edit(self):
+        self.cfg["output"]["fields"] = [f for f in self.cfg["output"]["fields"] if f != "registry"]
+        job, r = self.run_job(Fake(company()))
+        self.assertNotIn("registry", r)
