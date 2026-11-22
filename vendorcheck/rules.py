@@ -101,8 +101,12 @@ def decide(cfg: dict, o: dict) -> dict:
     linked = [f for f in media.get("findings", []) if f["link"] == "LINKED"]
     unresolved = [f for f in media.get("findings", []) if f["link"] == "UNRESOLVED"]
     cleared = [f for f in media.get("findings", []) if f["link"] == "NAMESAKE_CLEARED"]
+    by_article: dict[str, list] = {}           # one article = one signal, however many subjects it names
     for f in linked:
-        strong.append(f"Adverse news linked to {f['subject']}: \"{f['title']}\" ({', '.join(f['terms'])}).")
+        by_article.setdefault(f["url"], []).append(f)
+    for url, fs in by_article.items():
+        who = " and ".join(dict.fromkeys(f["subject"] for f in fs))
+        strong.append(f"Adverse news linked to {who}: \"{fs[0]['title']}\" ({', '.join(fs[0]['terms'])}).")
     for f in unresolved:
         cannot.append(f"Adverse news about {f['subject']} could not be checked: {f['why']}.")
     failed = [s for s in media.get("searches", []) if s["status"] in UNANSWERED]

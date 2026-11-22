@@ -85,8 +85,7 @@ class Fake:
                 "experience": {"current": [{"name": self.comp["basic_info"]["name"], "title": "Founder & CEO",
                                             "crustdata_company_id": self.person_company_id}]}}}]}])
         if ep == "/web/search/live":
-            subj = payload["query"].split('"')[1]
-            res = [n for n in self.news if n["subject"] == subj]
+            res = [n for n in self.news if f'"{n["subject"]}"' in payload["query"]]
             return 200, {"x-credits-used": "1"}, json.dumps({"success": True, "results": res})
         if ep == "/web/enrich/live":
             u = payload["urls"][0]

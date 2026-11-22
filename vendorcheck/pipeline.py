@@ -52,6 +52,16 @@ def job_matches(job: dict, company_id: str, domain: str, company_name: str | Non
     return names.similarity(job.get("employer_name") or job.get("name"), company_name) >= 0.85
 
 
+def cite_job(ev, stage, person_name, res, job_path, job, profile_url):
+    """Cite just the employer name and title of a current job, not the whole record."""
+    key_emp = "employer_name" if "employer_name" in job else "name"
+    key_title = "employee_title" if "employee_title" in job else "title"
+    ev.field(stage, f"{person_name}'s own profile: current employer", res, f"{job_path}.{key_emp}",
+             source_url=profile_url)
+    ev.field(stage, f"{person_name}'s own profile: current title", res, f"{job_path}.{key_title}",
+             source_url=profile_url)
+
+
 class Pipeline:
     def __init__(self, store: Store, cfg: dict, transport=urllib_transport, sleep=time.sleep, log=print):
         self.store, self.cfg, self.transport, self.sleep, self.log = store, cfg, transport, sleep, log
@@ -200,6 +210,8 @@ class Pipeline:
 
         people, seen = [], set()
         for group, i, p in ranked:
+            if len(people) >= self.cfg["people"]["max_leaders"]:
+                break
             bp = p.get("basic_profile") or {}
             pname = bp.get("name")
             if not pname or pname.lower() in seen:
@@ -216,8 +228,8 @@ class Pipeline:
             if jobs is not None:
                 hit = next((j for j in jobs if job_matches(j[1], company_id, domain, out["name"])), None)
                 if hit:
-                    self.ev.field("enrich", f"{pname}'s own profile lists the vendor as a current employer",
-                                  res, f"{ppath}.{hit[0]}", source_url=person["profile_url"] or res.url)
+                    cite_job(self.ev, "enrich", pname, res, f"{ppath}.{hit[0]}", hit[1],
+                             person["profile_url"] or res.url)
                     person.update(confirmed=True, current_title=hit[1].get("employee_title") or hit[1].get("title"),
                                   since=(hit[1].get("employee_start_date") or hit[1].get("start_date") or "")[:10])
                 else:
@@ -277,8 +289,7 @@ class Pipeline:
             hit = next((j for j in jobs if job_matches(j[1], company_id, domain, enr.get("name"))), None)
             base = "[0].matches[0].person_data"
             if hit:
-                self.ev.field("leaders", f"{p['name']}'s own profile lists the vendor as a current employer",
-                              res, f"{base}.{hit[0]}", source_url=p["profile_url"])
+                cite_job(self.ev, "leaders", p["name"], res, f"{base}.{hit[0]}", hit[1], p["profile_url"])
                 checked.append({**p, "confirmed": True,
                                 "current_title": hit[1].get("employee_title") or hit[1].get("title")})
             else:
@@ -299,20 +310,29 @@ class Pipeline:
         subjects = [("company", company)] + [("person", n) for n in leaders]
         core = names.core_name(company)
 
-        findings, fetched, searches = [], 0, []
-        for kind, subject in subjects:
-            q = f"\"{subject}\" " + " OR ".join(["fraud", "scam", "arrested", "raid", "\"shell company\""])
-            res = self.cd.web_search(q, sources=("news",), location=mcfg.get("country"))
-            searches.append({"subject": subject, "kind": kind, "status": res.status, "error": res.error})
-            if res.status != FOUND:
+        findings, fetched = [], 0
+        # One combined search for the company and every leader (one call instead of 1 + N:
+        # live search takes 6-25 s per call). Each result is matched back to whoever it names.
+        q = ("(" + " OR ".join(f'"{name}"' for _, name in subjects) + ") ("
+             + " OR ".join(mcfg["query_terms"]) + ")")
+        res = self.cd.web_search(q, sources=("news",), location=mcfg.get("country"))
+        searches = [{"subject": ", ".join(n for _, n in subjects), "query": q,
+                     "status": res.status, "error": res.error}]
+        results = (res.data.get("results") or []) if res.status == FOUND and isinstance(res.data, dict) else []
+        for r in results[: mcfg["max_results_per_query"]]:
+            blob = f"{r.get('title') or ''} {r.get('snippet') or ''}".lower()
+            hit_terms = [t for t in terms if t in blob]
+            if not hit_terms:
                 continue
-            for r in (res.data.get("results") or [])[: mcfg["max_results_per_query"]]:
-                blob = f"{r.get('title', '')} {r.get('snippet', '')}".lower()
-                hit_terms = [t for t in terms if t in blob]
-                if not hit_terms or subject.lower().split()[0] not in blob:
+            for kind, subject in subjects:
+                if kind == "company":
+                    named = core and core in names.core_name(blob)
+                else:
+                    named = subject.lower() in blob
+                if not named:
                     continue
-                item = {"subject": subject, "kind": kind, "title": r.get("title"), "url": r.get("url"),
-                        "terms": hit_terms}
+                item = {"subject": subject, "kind": kind, "title": (r.get("title") or "")[:200],
+                        "url": r.get("url"), "terms": hit_terms}
                 if fetched >= mcfg["max_articles_fetched"]:
                     item.update(link="UNRESOLVED", why="article not read: fetch limit reached")
                     findings.append(item)
@@ -325,10 +345,7 @@ class Pipeline:
                     continue
                 text = html_to_text((page.data[0] or {}).get("content") or "")
                 mentions_vendor = (core and core in names.core_name(text)) or (domain and domain in text.lower())
-                if kind == "company":
-                    linked = mentions_vendor and names.core_name(subject) == core
-                else:
-                    linked = mentions_vendor
+                linked = mentions_vendor
                 passage = snippet_around(text, subject) or snippet_around(text, hit_terms[0])
                 if linked:
                     item.update(link="LINKED", why=f"article names {subject} and the vendor ({company})")

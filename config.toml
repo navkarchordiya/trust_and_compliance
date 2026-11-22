@@ -40,10 +40,11 @@ max_leaders = 3                # founders first, then CXOs
 min_connections = 50           # CXOs below this are usually junk self-reported titles (seen: "reus zxz, Ceo")
 
 [media]
-max_results_per_query = 5
+max_results_per_query = 10
 max_articles_fetched = 4
 country = "IN"
-adverse_terms = ["fraud", "scam", "arrested", "arrest", "raid", "cheating", "money laundering",
+query_terms = ["fraud", "scam", "arrested", "raid", "\"shell company\"", "FIR", "jail"]
+adverse_terms = ["jail", "sentenced", "fir ", "eow", "cbi", "probe", "contempt", "fraud", "scam", "arrested", "arrest", "raid", "cheating", "money laundering",
                  "shell company", "fake invoice", "fake gst", "chargesheet", "absconding",
                  "default", "insolvency", "ponzi", "sebi order", "enforcement directorate", "ed raid"]
 
