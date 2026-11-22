@@ -149,6 +149,14 @@ What we tried, what works, and what comes next. (The guide: "They are the heart 
   - Job Search rate-limits bursts (429, retry after 50 s; seen while recording): the client already waits
     for the rate-limit header.
 
+- 14:25 Two weak signals on a known firm now go to a person (`[verdict] weak_signals_for_review`), not
+  "cannot verify": Ecom Express's result now leads with "website registered to Delhivery Limited" instead of
+  "GST page unreadable". Directors and a GSTIN/CIN are read from plain-words requests too. Tried confirming
+  directors through Crustdata Person Search: TCI Express's MD is not in the dataset under TCI, and a name
+  search returns strangers (a clerk, two GMs elsewhere), so we do not do it; such directors are "form only".
+  Homepages of VRL, Om Logistics and Mahindra Logistics carry no CIN in their visible text, so the CIN is
+  mostly expected from the vendor's form. Real-data outputs: `docs/real_tci_express.txt`, `docs/real_ecom_express.txt`.
+
 ## Declared before 10:15
 
 TODO before submitting: list anything written before 10:15 (code, prompts, notes), or write "Nothing".
