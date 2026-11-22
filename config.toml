@@ -4,7 +4,9 @@
 [crustdata]
 base_url = "https://api.crustdata.com"
 api_version = "2025-11-01"
-enrich_fields = ["basic_info", "headcount", "locations", "people", "news", "hiring"]
+enrich_fields = ["basic_info", "headcount.total", "headcount.growth_percent", "locations",
+                 "hiring.openings_count", "news", "people.founders", "people.cxos"]
+# Nested paths keep the response small: plain "people" returns ~300 decision makers (5.5 MB).
 
 [limits]
 max_credits_per_run = 40       # Crustdata credits; a run stops calling sources past this
@@ -34,7 +36,8 @@ age_mismatch_years = 3         # claimed founding year older than domain by this
 min_headcount = 3              # fewer visible employees than this = weak signal
 
 [people]
-max_leaders = 3                # how many leaders to confirm with Person Enrich
+max_leaders = 3                # founders first, then CXOs
+min_connections = 50           # CXOs below this are usually junk self-reported titles (seen: "reus zxz, Ceo")
 
 [media]
 max_results_per_query = 5

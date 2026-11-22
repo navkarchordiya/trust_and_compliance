@@ -49,8 +49,8 @@ verified, every fact with its source, and the cost of the run.
 | Source | Used for | Cost |
 |---|---|---|
 | Crustdata `POST /company/identify` | Resolve the domain or name to one company, with a confidence score | 0.2 credits per match |
-| Crustdata `POST /company/enrich` | Founding year, headcount, HQ, hiring, founders/CXOs, news | 2 credits |
-| Crustdata `POST /person/enrich` | Confirm each leader's current employer is the vendor | 1+ credit per person |
+| Crustdata `POST /company/enrich` | Status, founding year, headcount, HQ, hiring, news, founders/CXOs with their own employment history | 2 credits |
+| Crustdata `POST /person/enrich` | Fallback only: a leader whose employment history was missing | 1+ credit per person |
 | Crustdata `POST /web/search/live` (news, IN) | Adverse news about the company and each leader | 1 credit per page |
 | Crustdata `POST /web/enrich/live` | Fetch each article; the passage is stored as evidence | 1 credit per page |
 | RDAP (`rdap.org`) | Domain registration date, independent of the company's own claims | free |

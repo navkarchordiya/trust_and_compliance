@@ -32,10 +32,20 @@ What we tried, what works, and what comes next. (The guide: "They are the heart 
 
 - 11:40 Repo created, plan locked: theme 5.1 + 5.2, Python stdlib only.
 - 11:55 Pipeline, store, source wrapper, rules, approvals, offline tests (9 passing).
+- 12:10 Checked a real Company Enrich response (delhivery.com) through the Crustdata plugin:
+  - Plain `people` returns ~300 decision makers: **5.5 MB** per call. Nested paths
+    (`people.founders`, `people.cxos`, `headcount.total`, ...) cut it to ~350 KB for the same 2 credits.
+  - Each person is a full profile (`basic_profile.name`, `social_handles...profile_url`) with
+    employment history embedded, so "who runs it" needs no Person Enrich call (saves ~3 credits per vendor).
+  - `employer_company_id` is a list of strings (`["5798"]`); our first version compared integers and
+    would never have confirmed anyone. Fixed, with a regression test on the real (slimmed) response.
+  - CXO lists contain junk self-reported titles ("reus zxz, Ceo" at Delhivery, 0 connections).
+    Real executives had 850+ connections; CXOs below `min_connections = 50` are skipped.
+  - `basic_info.status` ("active") is on the record and is now used as a fact.
 
 ## Next
 
-- Run on real vendors with the Crustdata key; check the real shape of `people` in Company Enrich.
+- Run on real vendors with the Crustdata key in `.env`.
 - Gather real test cases dated after 1 Sep 2026 (see `tests/cases.md`).
 - LLM step to read articles: extract the person's employer/city/role so namesakes are cleared on
   positive evidence, not just absence of the vendor's name.

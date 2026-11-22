@@ -55,11 +55,13 @@ def render_text(r: dict) -> str:
     add("\nWho runs it:")
     for l in r.get("who_runs_it") or []:
         mark = {True: "confirmed", False: "NOT confirmed", None: "cannot verify"}[l.get("confirmed")]
-        add(f"  - {l['name']} — {l.get('current_title') or l.get('title') or '?'} [{mark}]"
+        add(f"  - {l['name']} — {l.get('current_title') or l.get('title') or '?'}"
+            + (f", since {l['since']}" if l.get("since") else "") + f" [{mark}]"
             + (f" ({l['why']})" if l.get("why") else ""))
     h = r.get("how_long_it_has_existed") or {}
     add(f"\nHow long it has existed: founded {h.get('year_founded') or '?'}; "
-        f"domain registered {(h.get('domain_registered') or '?')[:10]}")
+        f"domain registered {(h.get('domain_registered') or '?')[:10]}; "
+        f"earliest founder start {h.get('earliest_founder_start') or '?'}")
     add("\nTrading evidence:")
     for p in r.get("is_trading") or []:
         add(f"  + {p}")

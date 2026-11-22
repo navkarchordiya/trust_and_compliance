@@ -18,16 +18,34 @@ class Killed(Exception):
     """Stands in for the process being killed mid-call."""
 
 
+FIXTURES = Path(__file__).parent / "fixtures"
+
+
+def person(name, title, company_id, employer, website, url, start="2012-01-01T00:00:00.000Z", connections=900):
+    """Same shape as people.founders[] / people.cxos[] in a real Company Enrich response."""
+    return {"basic_profile": {"name": name, "current_title": title, "location": {"raw": "Pune, India"}},
+            "professional_network": {"connections": connections},
+            "social_handles": {"professional_network_identifier": {"profile_url": url}},
+            "experience": {"employment_details": {"current": [
+                {"employer_name": employer, "employer_company_id": [str(company_id)],
+                 "employer_website": [website], "employee_title": title,
+                 "employee_start_date": start, "employee_end_date": None}]}}}
+
+
 def company(cid=101, name="Acme Freight Private Limited", domain="acmefreight.in", year=2012, headcount=140,
-            founder="Ravi Menon", founder_url="https://www.linkedin.com/in/ravi-menon-acme"):
+            founder="Ravi Menon", founder_url="https://www.linkedin.com/in/ravi-menon-acme", status="active",
+            founder_employer_id=None):
     return {
-        "crustdata_company_id": cid, "updated_at": "2026-11-01T00:00:00Z",
+        "crustdata_company_id": cid,
         "basic_info": {"name": name, "primary_domain": domain, "website": f"https://{domain}",
-                       "year_founded": year, "employee_count_range": "51-200"},
-        "headcount": {"total": headcount},
+                       "year_founded": year, "employee_count_range": "51-200", "status": status},
+        "headcount": {"total": headcount, "growth_percent": {"yoy": 12.5}},
         "locations": {"headquarters": "Pune, Maharashtra, India", "country": "IND"},
         "hiring": {"openings_count": 6},
-        "people": {"founders": [{"name": founder, "title": "Founder & CEO", "linkedin_profile_url": founder_url}]},
+        "people": {"founders": [person(founder, "Founder & CEO",
+                                       founder_employer_id if founder_employer_id is not None else cid,
+                                       name, domain, founder_url)],
+                   "cxos": []},
         "news": [{"article_title": f"{name} opens new warehouse", "article_url": "https://news.example/acme",
                   "article_publish_date": "2026-10-02"}],
     }
@@ -113,7 +131,8 @@ class TestVerdicts(Base):
         self.assertEqual(calls[0]["attempts"], 1 + self.cfg["limits"]["max_retries"])
 
     def test_front_name_and_age_mismatch(self):
-        comp = company(name="Bluedart Express Logistics", domain="acmefreight.in", year=1998, headcount=1)
+        comp = company(name="Bluedart Express Logistics", domain="acmefreight.in", year=1998, headcount=1,
+                       founder_employer_id=999)
         fake = Fake(comp, reg_date="2026-09-20T00:00:00Z", person_company_id=999)
         job, r = self.run_job(fake)
         self.assertEqual(r["verdict"], "FRONT_SUSPECTED", r["looks_off"])
@@ -154,12 +173,12 @@ class TestVerdicts(Base):
 
 class TestRobustness(Base):
     def test_kill_and_resume_does_not_repeat_calls(self):
-        fake = Fake(company(), kill_on="/person/enrich")
+        fake = Fake(company(), kill_on="/web/search/live")
         job = new_job(self.store, {"name": "Acme Freight", "website": "acmefreight.in"})
         pipe = Pipeline(self.store, self.cfg, transport=fake, sleep=lambda s: None, log=lambda m: None)
         with self.assertRaises(Killed):
             pipe.run(job)
-        self.assertEqual(self.store.job(job)["stage"], "leaders")
+        self.assertEqual(self.store.job(job)["stage"], "media")
         Pipeline(self.store, self.cfg, transport=fake, sleep=lambda s: None, log=lambda m: None).run(job)
         self.assertEqual(fake.count["/company/identify"], 1)      # not paid twice
         self.assertEqual(fake.count["/company/enrich"], 1)
@@ -180,6 +199,32 @@ class TestRobustness(Base):
         job2, r2 = self.run_job(Fake(company()), {"name": "ACME FREIGHT PVT. LTD.", "website": "www.acmefreight.in"})
         self.assertEqual(r2["verdict"], "HOLD_FOR_REVIEW")
         self.assertTrue(any("Duplicate" in w for w in r2["looks_off"]["weak"]))
+
+
+class TestRealShape(Base):
+    """Real Company Enrich response for delhivery.com (slimmed), fetched 22 Nov 2026."""
+
+    def test_delhivery_fixture(self):
+        enrich = json.loads((FIXTURES / "delhivery_enrich.json").read_text())
+        comp = enrich[0]["matches"][0]["company_data"]
+        fake = Fake(comp, reg_date="2011-03-16T07:47:18Z")
+        job, r = self.run_job(fake, {"name": "Delhivery Limited", "website": "https://www.delhivery.com/"})
+        names_ = [l["name"] for l in r["who_runs_it"]]
+        self.assertEqual(names_[:3], ["Mohit Tandon", "Suraj Saharan", "Bhavesh Manglani"])
+        self.assertTrue(all(l["confirmed"] for l in r["who_runs_it"]))
+        self.assertNotIn("/person/enrich", fake.count)          # history came with Company Enrich
+        self.assertEqual(r["how_long_it_has_existed"]["earliest_founder_start"], "2011-04-01")
+        self.assertEqual(r["verdict"], "REAL_AND_TRADING", r)
+
+    def test_junk_cxo_filtered(self):
+        enrich = json.loads((FIXTURES / "delhivery_enrich.json").read_text())
+        comp = enrich[0]["matches"][0]["company_data"]
+        comp["people"]["founders"] = []
+        job, r = self.run_job(Fake(comp, reg_date="2011-03-16T07:47:18Z"),
+                              {"name": "Delhivery", "website": "delhivery.com"})
+        names_ = [l["name"] for l in r["who_runs_it"]]
+        self.assertIn("Sahil Barua", names_)
+        self.assertNotIn("reus zxz", names_)
 
 
 if __name__ == "__main__":

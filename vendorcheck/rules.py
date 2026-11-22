@@ -66,6 +66,11 @@ def decide(cfg: dict, o: dict) -> dict:
     if enr.get("status") in UNANSWERED:
         cannot.append(f"Company profile: the source did not answer ({enr.get('error')}).")
     elif enr.get("status") == "FOUND":
+        rs = (enr.get("record_status") or "").lower()
+        if rs == "active":
+            positive.append("Company record status: active.")
+        elif rs:
+            strong.append(f"Company record status is '{rs}', not active.")
         hc = enr.get("headcount")
         if hc is not None and hc >= cfg["operating"]["min_headcount"]:
             positive.append(f"{hc} employees visible on the company record.")
@@ -119,10 +124,11 @@ def decide(cfg: dict, o: dict) -> dict:
         verdict = "CANNOT_VERIFY" if cannot else "HOLD_FOR_REVIEW"
 
     answer = {
-        "who_runs_it": [{k: l.get(k) for k in ("name", "title", "current_title", "confirmed", "why",
-                                               "current_employers")} for l in leaders],
+        "who_runs_it": [{k: l.get(k) for k in ("name", "title", "current_title", "since", "location",
+                                               "confirmed", "why", "current_employers")} for l in leaders],
         "how_long_it_has_existed": {"year_founded": year, "domain_registered": dom.get("registered"),
-                                    "domain_age_days": age_days},
+                                    "domain_age_days": age_days,
+                                    "earliest_founder_start": enr.get("earliest_founder_start")},
         "is_trading": positive,
         "namesakes_cleared": [f"{f['subject']}: {f['title']} ({f['url']}) — {f['why']}" for f in cleared],
     }

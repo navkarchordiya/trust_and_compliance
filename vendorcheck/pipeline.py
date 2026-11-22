@@ -26,6 +26,32 @@ def new_job(store: Store, request: dict) -> str:
     return job_id
 
 
+def current_jobs(person: dict) -> list[tuple[str, dict]] | None:
+    """Current jobs as (json path inside the person, job). Handles both shapes Crustdata returns:
+    experience.employment_details.current[] (Company Enrich people) and experience.current[]."""
+    exp = person.get("experience")
+    if not isinstance(exp, dict):
+        return None
+    if isinstance(exp.get("employment_details"), dict):
+        return [(f"experience.employment_details.current[{j}]", job)
+                for j, job in enumerate(exp["employment_details"].get("current") or [])]
+    if isinstance(exp.get("current"), list):
+        return [(f"experience.current[{j}]", job) for j, job in enumerate(exp["current"])]
+    return None
+
+
+def job_matches(job: dict, company_id: str, domain: str, company_name: str | None) -> bool:
+    ids = job.get("employer_company_id") or job.get("crustdata_company_id") or []
+    ids = [str(x) for x in (ids if isinstance(ids, list) else [ids])]
+    sites = [names.domain_of(s) for s in (job.get("employer_website") or [])] if isinstance(
+        job.get("employer_website"), list) else [names.domain_of(job.get("employer_website"))]
+    if company_id and company_id in ids:
+        return True
+    if domain and domain in sites:
+        return True
+    return names.similarity(job.get("employer_name") or job.get("name"), company_name) >= 0.85
+
+
 class Pipeline:
     def __init__(self, store: Store, cfg: dict, transport=urllib_transport, sleep=time.sleep, log=print):
         self.store, self.cfg, self.transport, self.sleep, self.log = store, cfg, transport, sleep, log
@@ -147,35 +173,68 @@ class Pipeline:
             "status": "FOUND",
             "name": f("Company name", "basic_info.name"),
             "website": f("Website", "basic_info.website"),
+            "record_status": f("Company status on the record", "basic_info.status"),
             "year_founded": f("Year founded", "basic_info.year_founded"),
             "company_type": f("Company type", "basic_info.company_type"),
             "headcount": f("Employee headcount", "headcount.total"),
+            "headcount_growth_yoy": f("Headcount growth, year on year (%)", "headcount.growth_percent.yoy"),
             "employee_range": f("Employee count range", "basic_info.employee_count_range"),
             "hq": f("Headquarters", "locations.headquarters"),
             "hq_country": f("Headquarters country", "locations.country"),
             "openings": f("Open job postings", "hiring.openings_count"),
-            "updated_at": f("Record last refreshed", "updated_at"),
         }
         cd = res.data[0]["matches"][0]["company_data"]
-        people = []
-        for group in ("founders", "cxos", "decision_makers"):
-            for i, p in enumerate(((cd.get("people") or {}).get(group)) or []):
-                if not isinstance(p, dict):
-                    continue
-                pname = p.get("name") or " ".join(filter(None, [p.get("first_name"), p.get("last_name")]))
-                url = next((v for k, v in p.items() if isinstance(v, str) and "linkedin.com/in" in v), None)
-                if pname and pname not in [x["name"] for x in people]:
-                    self.ev.field("enrich", f"Listed among the company's {group}", res,
-                                  f"{b}.people.{group}[{i}]")
-                    people.append({"name": pname, "title": p.get("title"), "group": group, "profile_url": url})
+        company_id = str(cd.get("crustdata_company_id") or ident["top"]["id"])
+        domain = (self.out("take_request").get("domain") or ident["top"].get("domain") or "").lower()
+        min_conn = self.cfg["people"].get("min_connections", 0)
+
+        # Founders first, then CXOs ranked by network size (junk self-reported titles have ~0).
+        ranked = []
+        for group in ("founders", "cxos"):
+            members = list(enumerate(((cd.get("people") or {}).get(group)) or []))
+            if group == "cxos":
+                members = [(i, p) for i, p in members
+                           if ((p.get("professional_network") or {}).get("connections") or 0) >= min_conn]
+                members.sort(key=lambda ip: -((ip[1].get("professional_network") or {}).get("connections") or 0))
+            ranked += [(group, i, p) for i, p in members if isinstance(p, dict)]
+
+        people, seen = [], set()
+        for group, i, p in ranked:
+            bp = p.get("basic_profile") or {}
+            pname = bp.get("name")
+            if not pname or pname.lower() in seen:
+                continue
+            seen.add(pname.lower())
+            ppath = f"{b}.people.{group}[{i}]"
+            self.ev.field("enrich", f"Listed among the company's {group}", res, f"{ppath}.basic_profile.name")
+            person = {"name": pname, "title": bp.get("current_title"), "group": group,
+                      "location": (bp.get("location") or {}).get("raw"),
+                      "profile_url": ((p.get("social_handles") or {}).get("professional_network_identifier")
+                                      or {}).get("profile_url"),
+                      "confirmed": None}
+            jobs = current_jobs(p)
+            if jobs is not None:
+                hit = next((j for j in jobs if job_matches(j[1], company_id, domain, out["name"])), None)
+                if hit:
+                    self.ev.field("enrich", f"{pname}'s own profile lists the vendor as a current employer",
+                                  res, f"{ppath}.{hit[0]}", source_url=person["profile_url"] or res.url)
+                    person.update(confirmed=True, current_title=hit[1].get("employee_title") or hit[1].get("title"),
+                                  since=(hit[1].get("employee_start_date") or hit[1].get("start_date") or "")[:10])
+                else:
+                    person.update(confirmed=False,
+                                  current_employers=[j[1].get("employer_name") or j[1].get("name") for j in jobs])
+            people.append(person)
         out["people"] = people
+        starts = [p["since"] for p in people if p.get("group") == "founders" and p.get("since")]
+        out["earliest_founder_start"] = min(starts) if starts else None
+
         news = (cd.get("news") or [])
         if isinstance(news, dict):
             news = news.get("articles") or []
         out["news"] = [{"title": n.get("article_title"), "url": n.get("article_url"),
                         "date": n.get("article_publish_date")} for n in news[:10] if isinstance(n, dict)]
         if out["news"]:
-            f("Most recent news article on the company record", "news[0]")
+            f("Most recent news article on the company record", "news[0].article_title")
         return out
 
     # ------------------------------------------------------------------ 3. gather: domain age
@@ -196,36 +255,35 @@ class Pipeline:
 
     # ------------------------------------------------------------------ 3. gather: who runs it
     def s_leaders(self) -> dict:
-        enr, ident = self.out("enrich"), self.out("identify")
-        people = (enr or {}).get("people") or []
-        company_id = (ident.get("top") or {}).get("id")
-        company_name = (enr or {}).get("name") or (ident.get("top") or {}).get("name")
+        """Company Enrich already carries each leader's employment history. Person Enrich is only
+        called for a leader whose history was missing there."""
+        enr, ident = self.out("enrich") or {}, self.out("identify") or {}
+        company_id = str((ident.get("top") or {}).get("id") or "")
+        domain = (self.out("take_request").get("domain") or "").lower()
         checked = []
-        for p in people[: self.cfg["people"]["max_leaders"]]:
+        for p in (enr.get("people") or [])[: self.cfg["people"]["max_leaders"]]:
+            if p.get("confirmed") is not None:
+                checked.append(p)
+                continue
             if not p.get("profile_url"):
-                checked.append({**p, "confirmed": None, "why": "no profile URL on the company record"})
+                checked.append({**p, "why": "no employment history and no profile URL on the record"})
                 continue
             res = self.cd.enrich_person(p["profile_url"])
             if res.status != FOUND:
-                checked.append({**p, "confirmed": None, "why": f"Person Enrich {res.status} {res.error}".strip()})
+                checked.append({**p, "why": f"Person Enrich {res.status} {res.error}".strip()})
                 continue
             pd = res.data[0]["matches"][0]["person_data"]
-            current = ((pd.get("experience") or {}).get("current")) or []
-            hit = None
-            for j, job in enumerate(current):
-                if (company_id and job.get("crustdata_company_id") == company_id) or \
-                        names.similarity(job.get("name"), company_name) >= 0.85:
-                    hit = j
-                    break
-            if hit is not None:
-                self.ev.field("leaders", f"{p['name']} currently works at the vendor", res,
-                              f"[0].matches[0].person_data.experience.current[{hit}]", source_url=p["profile_url"])
-                checked.append({**p, "confirmed": True, "current_title": current[hit].get("title")})
+            jobs = current_jobs(pd) or []
+            hit = next((j for j in jobs if job_matches(j[1], company_id, domain, enr.get("name"))), None)
+            base = "[0].matches[0].person_data"
+            if hit:
+                self.ev.field("leaders", f"{p['name']}'s own profile lists the vendor as a current employer",
+                              res, f"{base}.{hit[0]}", source_url=p["profile_url"])
+                checked.append({**p, "confirmed": True,
+                                "current_title": hit[1].get("employee_title") or hit[1].get("title")})
             else:
-                self.ev.field("leaders", f"{p['name']}'s current employers (vendor not among them)", res,
-                              "[0].matches[0].person_data.experience.current", source_url=p["profile_url"])
                 checked.append({**p, "confirmed": False,
-                                "current_employers": [c.get("name") for c in current]})
+                                "current_employers": [j[1].get("employer_name") or j[1].get("name") for j in jobs]})
         return {"leaders": checked}
 
     # ------------------------------------------------------------------ 3. gather: adverse media (5.2)
