@@ -60,3 +60,22 @@ def rdap_domain(client: SourceClient, domain: str) -> Result:
     """Domain registration record from the public RDAP bootstrap (free, no key)."""
     return client.call("rdap", "rdap", "GET", f"https://rdap.org/domain/{domain}",
                        headers={"accept": "application/rdap+json"})
+
+
+def gst_verify(client: SourceClient, cfg: dict, gstin: str) -> Result | None:
+    """GSTIN lookup in the GST registry through a KYC provider. Returns None when no provider key
+    is configured (the check is then reported as 'cannot verify', never as a pass).
+
+    Cashfree Secure ID: POST {base}/gstin  {"GSTIN": ...}  with x-client-id / x-client-secret.
+    Fields used: valid, gst_in_status, legal_name_of_business, trade_name_of_business,
+    date_of_registration, constitution_of_business. Run one real call and adjust if they differ.
+    """
+    rcfg = cfg.get("registry", {})
+    if rcfg.get("provider") != "cashfree":
+        return None
+    client_id, secret = os.environ.get("CASHFREE_CLIENT_ID"), os.environ.get("CASHFREE_CLIENT_SECRET")
+    if not (client_id and secret):
+        return None
+    url = rcfg["cashfree_base_url"].rstrip("/") + "/gstin"
+    headers = {"x-client-id": client_id, "x-client-secret": secret, "content-type": "application/json"}
+    return client.call("gst", "/gstin", "POST", url, {"GSTIN": gstin}, headers)

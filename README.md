@@ -18,6 +18,9 @@ one, so the check is slow, manual and error-prone.
 ```bash
 python -m vendorcheck run --name "Acme Freight Pvt Ltd" --website acmefreight.in
 python -m vendorcheck run --text "Here is a new vendor: 'Acme Freight', acmefreight.in. Is it real?"
+python -m vendorcheck run --name "Acme Freight Pvt Ltd" --website acmefreight.in --gstin 27AAACA1234A1Z5
+python -m vendorcheck batch requests.json     # JSON list or CSV (name, website, text, gstin); restart-safe
+python -m vendorcheck eval tests/cases.json   # batch + pass / safe miss / wrong against each row's "expected"
 ```
 
 ## Finished result
@@ -48,12 +51,30 @@ verified, every fact with its source, and the cost of the run.
 
 | Source | Used for | Cost |
 |---|---|---|
-| Crustdata `POST /company/identify` | Resolve the domain or name to one company, with a confidence score | 0.2 credits per match |
+| Crustdata `POST /company/identify` | Resolve the domain or name to one company, with a confidence score | free |
 | Crustdata `POST /company/enrich` | Status, founding year, headcount, HQ, hiring, news, founders/CXOs with their own employment history | 2 credits |
 | Crustdata `POST /person/enrich` | Fallback only: a leader whose employment history was missing | 1+ credit per person |
 | Crustdata `POST /web/search/live` (news, IN) | Adverse news about the company and each leader | 1 credit per page |
 | Crustdata `POST /web/enrich/live` | Fetch each article; the passage is stored as evidence | 1 credit per page |
+| Crustdata `POST /web/enrich/live` (vendor homepage) | GSTIN printed on the vendor's own website, kept as a verbatim passage | 1 credit |
+| GST registry via Cashfree Secure ID (`/verification/gstin`, optional) | GST status, legal and trade name, registration date for the GSTIN | per provider plan |
 | RDAP (`rdap.org`) | Domain registration date, independent of the company's own claims | free |
+
+## Hard cases (from the brief) and how each is handled
+
+| Case | What the service does | Test |
+|---|---|---|
+| Lookalike name: real firm's name, different website | Identify by the website finds nothing, by name finds the real firm on another domain: **strong red flag "Lookalike"**, and the real firm's records are never used for this vendor | `TestLookalike`, `TestRealIdentifyByName` |
+| Name only, close but not exact | Not resolved: **cannot verify**, asks for the website. Identify-by-name pads its answer with unrelated firms (seen live), so candidates are ranked by name match | `test_name_only_partial_match_cannot_verify` |
+| Unknown vendor | **Cannot verify**, never accused | `test_unknown_vendor_is_not_accused` |
+| Duplicate | Same website or Crustdata ID already in the vendor register or an open job: **held**, rest of the check skipped (saves credits) | `test_duplicate_vendor_is_held`, batch test |
+| Source timeout / budget | **Cannot verify** with the reason; never a red flag | `test_timeout_is_cannot_verify_not_front` |
+| Namesake in the news | Cleared (marked *weak*: based on absence) unless the article also names the vendor | `test_namesake_is_cleared` |
+| Vendor is the victim ("fraudsters posing as …") | Not adverse | `test_vendor_as_victim_is_not_adverse` |
+| Fake or cancelled GSTIN | Check-digit failure or non-active registry status: **strong red flag** | `TestRegistry` |
+
+A wrong answer counts against us more than *cannot verify*, so every rule falls back to
+*cannot verify* or *hold* when the evidence is incomplete.
 
 ## Approvals (human in the loop)
 
@@ -67,6 +88,17 @@ python -m vendorcheck decline JOB --by "Your Name"
 Agents stay in the room: notifications go to an internal `outbox` table for the team, never to
 the vendor or anyone outside.
 
+## Financial feasibility
+
+- **Buyer:** the client's procurement / vendor-onboarding team (compliance signs off). Today they pay an
+  outside verification firm per vendor, or spend analyst hours on manual checks.
+- **Price:** ₹ ___ per vendor cleared (fill in), charged only when a verdict is delivered.
+- **Measured cost per job:** shown on every result (`cost.crustdata_credits`, `cost.inr`) and per call in
+  `python -m vendorcheck ledger JOB`. A typical run is Identify (free) + Enrich (2) + homepage (1) + one
+  combined news search (1) + up to 4 article fetches = **4 to 8 credits**; duplicates stop after Identify.
+  Rupee figures use `[cost] inr_per_credit` in `config.toml`: set it to your plan's real rate.
+- **Margin** = price − (credits × ₹/credit + GST lookup + LLM, none used today).
+
 ## Robustness
 
 ```bash
@@ -74,12 +106,16 @@ python -m vendorcheck run --website acmefreight.in   # kill it at any moment (Ct
 python -m vendorcheck resume                         # carries on from the stage it was in
 python -m vendorcheck ledger JOB                     # every call, status, attempts, credits
 python -m vendorcheck raw CALL_ID                    # the stored raw response behind a fact
+python -m vendorcheck outbox                         # internal notifications (exactly once)
 ```
+
+Every result is also written to `data/results/JOB.json`. For screening, use a fresh database
+(`--db data/screening.db`) so test runs from the build are not reported as duplicates.
 
 ## Setup
 
 ```bash
-cp .env.example .env        # add CRUSTDATA_API_KEY
+cp .env.example .env        # add CRUSTDATA_API_KEY (and optionally CASHFREE_CLIENT_ID / _SECRET)
 python -m unittest discover -s tests -v
 ```
 

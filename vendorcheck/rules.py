@@ -12,12 +12,15 @@ did not answer is never read as "does not exist".
 """
 from datetime import datetime
 
+from . import names
+
 UNANSWERED = ("UNAVAILABLE", "ERROR", "SKIPPED_BUDGET")
 
 
 def decide(cfg: dict, o: dict) -> dict:
     req, ident, enr = o.get("take_request") or {}, o.get("identify") or {}, o.get("enrich") or {}
     dom, lead, media = o.get("domain_age") or {}, o.get("leaders") or {}, o.get("media") or {}
+    reg = o.get("registry") or {}
     strong, weak, positive, cannot = [], [], [], []   # strong = signs of a FRONT (fake business)
     adverse, review = [], []                              # real-but-risky: these send it to a person
 
@@ -35,7 +38,18 @@ def decide(cfg: dict, o: dict) -> dict:
                       f"{req.get('domain') or req.get('name')}.")
     elif status == "AMBIGUOUS":
         names_ = ", ".join(f"{c['name']} ({c['domain']})" for c in ident.get("candidates", [])[:3])
-        review.append(f"Ambiguous identity: several records match closely ({names_}). Possible lookalike.")
+        review.append(f"Ambiguous identity: several records match closely ({names_}). A person must pick one.")
+    elif status == "DOMAIN_MISMATCH":
+        top = ident.get("top") or {}
+        strong.append(f"Lookalike: no company record has the website {req.get('domain')}, but the name "
+                      f"'{req.get('name')}' matches {top.get('name')}, whose website is {top.get('domain')}. "
+                      "The real firm's records were NOT used for this vendor.")
+        cannot.append(f"Company identity: no company record for the website {req.get('domain')}.")
+    elif status == "NAME_UNCONFIRMED":
+        top = ident.get("top") or {}
+        cannot.append(f"Company identity: no website given, and the closest record ('{top.get('name')}', "
+                      f"{top.get('domain')}) only partly matches the name '{req.get('name')}' "
+                      f"(similarity {ident.get('name_similarity')}). Send the vendor's website.")
     sim = ident.get("name_similarity")
     if sim is not None and sim < cfg["identity"]["min_name_similarity"] and status == "RESOLVED":
         strong.append(f"Name mismatch: the request says '{req.get('name')}' but the website belongs to "
@@ -46,9 +60,11 @@ def decide(cfg: dict, o: dict) -> dict:
     if ident.get("duplicate_of"):
         d = ident["duplicate_of"]
         weak.append(f"Duplicate: this company was already {d['decision']} in job {d['job_id']}.")
+        review.append("Possible duplicate of an existing vendor; the rest of the check was not repeated.")
     elif ident.get("earlier_job"):
-        weak.append(f"Duplicate request: the same company was checked in job {ident['earlier_job']['id']} "
-                    f"(verdict {ident['earlier_job']['verdict']}).")
+        weak.append(f"Duplicate request: the same company is already being checked in job "
+                    f"{ident['earlier_job']['id']} (verdict {ident['earlier_job']['verdict'] or 'pending'}).")
+        review.append("Possible duplicate request; the rest of the check was not repeated.")
 
     # ---- how long it has existed
     year = enr.get("year_founded")
@@ -87,6 +103,47 @@ def decide(cfg: dict, o: dict) -> dict:
         if enr.get("news"):
             positive.append(f"{len(enr['news'])} news articles on the company record, latest "
                             f"{(enr['news'][0].get('date') or '')[:10]}.")
+
+    # ---- registry (GST)
+    reg_summary = []
+    if reg.get("status") in UNANSWERED:
+        cannot.append(f"GST registration: {reg.get('missing') or 'the website could not be read'}.")
+    elif reg.get("status") == "DONE" and not reg.get("gstins"):
+        cannot.append("GST registration: no GSTIN found on the vendor's website; ask the vendor for it.")
+    claimed_name = enr.get("name") or req.get("name")
+    rcfg = cfg.get("registry", {})
+    for g in reg.get("gstins") or []:
+        gid = g["gstin"]
+        if not g.get("checksum_ok"):
+            strong.append(f"Invalid GSTIN on the vendor's website: {gid} fails the GSTIN check-digit test.")
+            continue
+        if claimed_name and names.claims_company(claimed_name) and g.get("pan_holder_type") not in (None, "company"):
+            weak.append(f"GSTIN {gid} belongs to a PAN of type '{g['pan_holder_type']}', but the name "
+                        f"'{claimed_name}' says it is a company.")
+        if g.get("registry") == "FOUND":
+            st = (g.get("status") or "").lower()
+            if g.get("valid") is False:
+                strong.append(f"GSTIN {gid} shown on the website is not in the GST registry.")
+            elif st and st != "active":
+                strong.append(f"GST registration {gid} is '{g['status']}', not active.")
+            elif st == "active":
+                positive.append(f"GST registration {gid} is active (registered {g.get('registered') or '?'}).")
+            best = max(names.similarity(claimed_name, g.get("legal_name")),
+                       names.similarity(claimed_name, g.get("trade_name")))
+            if claimed_name and (g.get("legal_name") or g.get("trade_name")) and \
+                    best < rcfg.get("min_legal_name_similarity", 0.6):
+                weak.append(f"GST registration {gid} is held by '{g.get('legal_name')}' (trade name "
+                            f"'{g.get('trade_name')}'), which does not match '{claimed_name}'.")
+            reg_year = str(g.get("registered") or "")[-4:] if "/" in str(g.get("registered") or "") \
+                else str(g.get("registered") or "")[:4]
+            if year and reg_year.isdigit() and int(reg_year) >= 2018 and \
+                    int(reg_year) - int(year) > cfg["age"]["age_mismatch_years"]:
+                weak.append(f"GST registration {gid} dates from {g.get('registered')}, years after the "
+                            f"claimed founding year {year}.")
+        elif g.get("registry") in ("NOT_CONFIGURED",) + UNANSWERED:
+            cannot.append(f"GST registration {gid}: registry not checked ({g.get('why') or g['registry']}).")
+        reg_summary.append({k: g.get(k) for k in ("gstin", "checksum_ok", "pan_holder_type", "registry",
+                                                    "valid", "status", "legal_name", "trade_name", "registered")})
 
     # ---- who runs it
     leaders = lead.get("leaders") or []
@@ -138,7 +195,9 @@ def decide(cfg: dict, o: dict) -> dict:
                                     "domain_age_days": age_days,
                                     "earliest_founder_start": enr.get("earliest_founder_start")},
         "is_trading": positive,
-        "namesakes_cleared": [f"{f['subject']}: {f['title']} ({f['url']}) — {f['why']}" for f in cleared],
+        "namesakes_cleared": [f"{f['subject']}: {f['title']} ({f['url']}) — {f['why']}"
+                              for f in cleared + [f for f in media.get("findings", []) if f["link"] == "NOT_ADVERSE"]],
+        "registry": reg_summary,
     }
     return _result(verdict, cannot, strong, weak, positive, answer, req, adverse, review)
 

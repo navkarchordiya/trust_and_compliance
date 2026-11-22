@@ -7,13 +7,15 @@ flowchart TD
     PLAN --> GATHER
 
     subgraph GATHER[3. Gather the facts — each sub-stage checkpointed]
-        ID[identify<br/>Crustdata Company Identify] --> EN[enrich<br/>Crustdata Company Enrich]
+        ID[identify<br/>Crustdata Company Identify<br/>lookalike + duplicate checks] --> EN[enrich<br/>Crustdata Company Enrich]
         EN --> AGE[domain_age<br/>RDAP]
-        AGE --> LEAD[leaders<br/>Crustdata Person Enrich]
+        AGE --> REGS[registry<br/>GSTIN from request or homepage<br/>checksum + GST registry]
+        REGS --> LEAD[leaders<br/>Crustdata Person Enrich]
         LEAD --> MEDIA[media<br/>Crustdata Web Search + Fetch<br/>namesake clearing]
     end
 
     GATHER --> DECIDE[4. Decide<br/>rules in config.toml]
+    ID -.->|duplicate: skip the rest| DECIDE
     DECIDE --> HAND[5. Act, or hand over<br/>approval queue]
     HAND -->|person approves| ACT[Action executor<br/>idempotency key, one transaction]
     HAND -->|person declines| CLOSE[closed, no action]
@@ -30,6 +32,7 @@ flowchart TD
     ID -.-> SC
     EN -.-> SC
     AGE -.-> SC
+    REGS -.-> SC
     LEAD -.-> SC
     MEDIA -.-> SC
 
@@ -52,6 +55,18 @@ flowchart TD
 | Approvals | `approvals` table, `actions.py` | Clearing and rejecting both wait for a person |
 | Exactly once | `actions` table (idempotency key) | Approval, action, register entry and notification commit together |
 | Rules and output fields | `config.toml` | Thresholds, limits and output fields change without code changes |
+
+## Exactly once: the outbox pattern
+
+An approval writes four rows in ONE SQLite transaction: the approval decision, the action row
+(primary key = idempotency key `JOB:action`), the vendor-register entry and the outbox message.
+Either all four commit or none do. A kill before COMMIT leaves nothing, so the person can approve
+again; a kill after COMMIT makes a repeat approval a no-op ("already done"). Sending a message
+outside the database (email, Slack) would be a separate worker reading the outbox and marking each
+row sent, so a crash between "sent" and "marked" re-sends at most once to an idempotent receiver.
+
+Batch rows get job IDs from the batch file's hash and the row number, so re-running a batch after a
+crash resumes unfinished rows instead of creating new jobs (which would also look like duplicates).
 
 ## Scaling notes (for the design question)
 

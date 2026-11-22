@@ -103,6 +103,19 @@ class Store:
         self.db.execute("PRAGMA journal_mode=WAL")
         self.db.execute("PRAGMA synchronous=FULL")
         self.db.executescript(SCHEMA)
+        self._migrate()
+
+    def _migrate(self) -> None:
+        """Add columns introduced after the first schema, so an existing database keeps working."""
+        wanted = {
+            "calls": {"credits_source": "TEXT"},       # reported (X-Credits-Used header) | estimated | none
+            "facts": {"record_date": "TEXT"},          # the date the source gives for the record itself
+        }
+        for table, columns in wanted.items():
+            have = {row["name"] for row in self.db.execute(f"PRAGMA table_info({table})")}
+            for column, kind in columns.items():
+                if column not in have:
+                    self.db.execute(f"ALTER TABLE {table} ADD COLUMN {column} {kind}")
 
     # ---- jobs ----
     def create_job(self, job_id: str, request: dict, first_stage: str) -> None:
@@ -163,7 +176,7 @@ class Store:
 
     def ledger(self, job_id: str) -> list[sqlite3.Row]:
         return self.db.execute(
-            "SELECT id, source, endpoint, status, credits, attempts, latency_ms, retrieved_at "
+            "SELECT id, source, endpoint, status, credits, credits_source, attempts, latency_ms, retrieved_at "
             "FROM calls WHERE job_id=? ORDER BY id", (job_id,)
         ).fetchall()
 
@@ -194,10 +207,14 @@ class Store:
         return None
 
     def earlier_job_for(self, job_id: str, keys: list[str]) -> sqlite3.Row | None:
-        """Another job (not this one) that resolved to the same company."""
+        """Another OPEN job (running or waiting for approval) that resolved to the same company.
+        Closed jobs do not count: a declined check can be run again, and an approved or rejected
+        vendor is caught by register_lookup instead."""
         for row in self.db.execute(
             "SELECT j.id, j.verdict, j.status, s.output_json FROM jobs j JOIN stage_outputs s "
-            "ON s.job_id=j.id AND s.stage='identify' WHERE j.id<>? ORDER BY j.started_at", (job_id,)
+            "ON s.job_id=j.id AND s.stage='identify' WHERE j.id<>? AND j.status<>'closed' "
+            "AND j.started_at <= (SELECT started_at FROM jobs WHERE id=?) ORDER BY j.started_at",
+            (job_id, job_id)
         ):
             out = json.loads(row["output_json"])
             if any(k and k in (out.get("company_keys") or []) for k in keys):

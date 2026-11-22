@@ -11,8 +11,17 @@ def build_result(store: Store, cfg: dict, job_id: str) -> dict:
     appr = store.db.execute("SELECT * FROM approvals WHERE job_id=?", (job_id,)).fetchone()
     ledger = store.ledger(job_id)
     by_endpoint: dict[str, float] = {}
+    estimated = 0.0
+    gst_calls = 0
     for c in ledger:
         by_endpoint[c["endpoint"]] = round(by_endpoint.get(c["endpoint"], 0) + c["credits"], 3)
+        if c["credits_source"] == "estimated":
+            estimated += c["credits"]
+        if c["source"] == "gst" and c["status"] in ("FOUND", "NOT_FOUND"):
+            gst_calls += 1
+    credits = round(store.credits_spent(job_id), 3)
+    ccfg = cfg.get("cost", {})
+    inr = round(credits * ccfg.get("inr_per_credit", 0) + gst_calls * ccfg.get("gst_inr_per_call", 0), 2)
     full = {
         "job_id": job_id,
         "request": json.loads(job["request_json"]),
@@ -30,17 +39,31 @@ def build_result(store: Store, cfg: dict, job_id: str) -> dict:
         "looks_off": d.get("looks_off"),
         "namesakes_cleared": d.get("namesakes_cleared"),
         "cannot_verify": d.get("cannot_verify"),
+        "registry": d.get("registry"),
         "facts": [{"id": f["id"], "claim": f["claim"], "value": json.loads(f["value_json"]),
                    "source": f["source_url"], "field_or_passage": f["locator"], "quote": f["quote"],
-                   "retrieved_at": f["retrieved_at"], "raw_response": f"call #{f['call_id']}"}
+                   "record_date": f["record_date"], "retrieved_at": f["retrieved_at"],
+                   "raw_response": f"call #{f['call_id']}"}
                   for f in store.facts(job_id)],
-        "cost": {"crustdata_credits": round(store.credits_spent(job_id), 3),
+        "cost": {"crustdata_credits": credits,
+                 "credits_estimated_not_reported": round(estimated, 3),
                  "credit_limit": cfg["limits"]["max_credits_per_run"],
+                 "inr": inr, "inr_per_credit_assumed": ccfg.get("inr_per_credit"),
                  "calls": len(ledger), "by_endpoint": by_endpoint,
                  "elapsed_s": round(job["updated_at"] - job["started_at"], 1)},
     }
     keep = set(cfg["output"]["fields"]) | {"summary", "namesakes_cleared", "stage", "status"}
     return {k: v for k, v in full.items() if k in keep}
+
+
+def save_result(store: Store, cfg: dict, job_id: str, folder=None) -> str:
+    """Write the finished result to data/results/JOB.json (the evidence file kept on record)."""
+    from .config import ROOT
+    folder = folder or ROOT / "data" / "results"
+    folder.mkdir(parents=True, exist_ok=True)
+    path = folder / f"{job_id}.json"
+    path.write_text(json.dumps(build_result(store, cfg, job_id), indent=2, ensure_ascii=False))
+    return str(path)
 
 
 def render_text(r: dict) -> str:
@@ -80,6 +103,13 @@ def render_text(r: dict) -> str:
         add("\nNamesakes cleared:")
         for s in r["namesakes_cleared"]:
             add(f"  ~ {s}")
+    if r.get("registry"):
+        add("\nGST registration:")
+        for g in r["registry"]:
+            add(f"  # {g['gstin']}  checksum {'ok' if g['checksum_ok'] else 'FAILED'}  PAN type {g.get('pan_holder_type')}"
+                f"  registry {g.get('registry')}"
+                + (f": {g.get('status')}, {g.get('legal_name')}, registered {g.get('registered')}"
+                   if g.get("registry") == "FOUND" else ""))
     if r.get("cannot_verify"):
         add("\nCannot verify:")
         for s in r["cannot_verify"]:
@@ -87,8 +117,11 @@ def render_text(r: dict) -> str:
     add("\nSources:")
     for f in r.get("facts") or []:
         add(f"  [{f['id']}] {f['claim']}: {json.dumps(f['value'])[:90]}")
-        add(f"       {f['source']}  ·  {f['field_or_passage']}  ·  {f['retrieved_at']}  ·  {f['raw_response']}")
+        dated = f"record dated {f['record_date']}" if f.get("record_date") else "record date not stated by source"
+        add(f"       {f['source']}  ·  {f['field_or_passage']}  ·  {dated}  ·  retrieved {f['retrieved_at']}"
+            f"  ·  {f['raw_response']}")
     c = r.get("cost") or {}
-    add(f"\nCost: {c.get('crustdata_credits')} / {c.get('credit_limit')} Crustdata credits, "
+    add(f"\nCost: {c.get('crustdata_credits')} / {c.get('credit_limit')} Crustdata credits "
+        f"(≈ ₹{c.get('inr')} at ₹{c.get('inr_per_credit_assumed')}/credit), "
         f"{c.get('calls')} calls, {c.get('elapsed_s')}s  {c.get('by_endpoint')}")
     return "\n".join(L)

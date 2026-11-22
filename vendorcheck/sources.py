@@ -62,13 +62,15 @@ class SourceClient:
         self.store, self.job_id, self.cfg = store, job_id, cfg
         self.transport, self.sleep = transport, sleep
         self.limits = cfg["limits"]
+        # The time limit counts from when THIS process picked the job up. Counting from the job's
+        # creation would make every resume after a long pause skip all its calls.
+        self.run_started = time.time()
 
     def _over_budget(self, estimate: float) -> str:
-        job = self.store.job(self.job_id)
         spent = self.store.credits_spent(self.job_id)
         if spent + estimate > self.limits["max_credits_per_run"]:
             return f"credit limit {self.limits['max_credits_per_run']} reached (spent {spent:g})"
-        if job and time.time() - job["started_at"] > self.limits["max_seconds_per_run"]:
+        if time.time() - self.run_started > self.limits["max_seconds_per_run"]:
             return f"time limit {self.limits['max_seconds_per_run']}s reached"
         return ""
 
@@ -87,11 +89,13 @@ class SourceClient:
         if reason:
             cid = self.store.record_call(
                 job_id=self.job_id, source=source, endpoint=endpoint, request_key=key, request_json=req_json,
-                status=SKIPPED_BUDGET, error=reason, credits=0, attempts=0, retrieved_at=now_iso())
+                status=SKIPPED_BUDGET, error=reason, credits=0, credits_source="none", attempts=0,
+                retrieved_at=now_iso())
             return Result(SKIPPED_BUDGET, None, cid, url, now_iso(), reason)
 
         body = json.dumps(payload).encode() if payload is not None else None
         attempts, status, http_status, text, error, credits = 0, UNAVAILABLE, None, None, "", 0.0
+        credits_source = "none"
         t0 = time.time()
         max_attempts = 1 + int(self.limits["max_retries"])
         while attempts < max_attempts:
@@ -118,7 +122,13 @@ class SourceClient:
                 self.sleep(self.limits["backoff_s"] * attempts)
                 continue
 
-            credits = float(rh.get("x-credits-used") or (estimate if 200 <= http_status < 300 else 0))
+            reported = rh.get("x-credits-used")
+            if reported not in (None, ""):
+                credits, credits_source = float(reported), "reported"
+            elif 200 <= http_status < 300:
+                credits, credits_source = estimate, "estimated"
+            else:
+                credits, credits_source = 0.0, "none"
             if http_status == 404:
                 status, error = NOT_FOUND, ""
             elif 400 <= http_status < 500:
@@ -136,7 +146,8 @@ class SourceClient:
         cid = self.store.record_call(
             job_id=self.job_id, source=source, endpoint=endpoint, request_key=key, request_json=req_json,
             status=status, http_status=http_status, response_text=text if status in (FOUND, NOT_FOUND) else text,
-            error=error, credits=credits, attempts=attempts, latency_ms=int((time.time() - t0) * 1000),
+            error=error, credits=credits, credits_source=credits_source, attempts=attempts,
+            latency_ms=int((time.time() - t0) * 1000),
             retrieved_at=now_iso())
         return self._result(self.store.call(cid), url)
 

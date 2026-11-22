@@ -58,6 +58,29 @@ What we tried, what works, and what comes next. (The guide: "They are the heart 
   - Not found yet: a named shell company with a website in news after 1 Sep 2026; GST-fraud reports
     rarely name the shell firms.
 
+- 12:08 (Vedant) One combined news search for the company and all leaders: live Delhivery run ~95 s → 17 s.
+- 12:30 Hard cases and live checks through the Crustdata MCP connector:
+  - Identify by **name** returns padding: "Delhivery Limited" came back with Delhivery, "Delhivery courier",
+    Reliance, ITC, Britannia ... **all at confidence 0.6**. The old code took row 0, so an unknown vendor
+    would have been matched to a random big firm. Now candidates are ranked by name similarity, and below
+    0.85 the answer is *cannot verify*, never an accusation.
+  - Lookalike bug: a request with an unknown website fell back to name, matched the real firm and would have
+    been **cleared with the real firm's records**. Now a strong "Lookalike" red flag; enrich is skipped.
+  - Identify for an unknown domain returns `matches: []` (handled as NOT_FOUND).
+  - News search results have no date field (`position, title, url, snippet, source`), so article facts
+    carry "record date not stated"; the fetch time is kept as `retrieved_at`.
+  - Delhivery's homepage has no GSTIN and `/contact-us` is a 404 page that still returns `success: true`.
+    So the registry stage reads only the homepage, and a GSTIN can come in the request (`--gstin`).
+  - Adverse terms are whole words in the same sentence as the name ("by default" no longer matches), and
+    victim context ("posing as", "in the name of", "beware of") is not adverse news.
+  - Time limit counted from job creation, so a resume after a long pause skipped every call. Now it counts
+    from when the current process picked the job up.
+  - Identify is free (docs.crustdata.com/general/pricing); `X-Credits-Used` confirmed as the header.
+
+## Declared before 10:15
+
+TODO before submitting: list anything written before 10:15 (code, prompts, notes), or write "Nothing".
+
 ## Next
 
 - Run on real vendors with the Crustdata key in `.env`.

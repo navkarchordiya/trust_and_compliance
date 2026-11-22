@@ -6,6 +6,7 @@ Gathering is split into resumable sub-stages. After each stage its output is sav
 job advances in one transaction, so a killed run restarts at the stage it was in.
 """
 import json
+import re
 import time
 import uuid
 from datetime import datetime, timezone
@@ -16,13 +17,17 @@ from .evidence import Evidence, html_to_text, snippet_around
 from .sources import FOUND, NOT_FOUND, SourceClient, urllib_transport
 from .store import Store, now_iso
 
-STAGES = ["take_request", "plan", "identify", "enrich", "domain_age", "leaders", "media",
+STAGES = ["take_request", "plan", "identify", "enrich", "domain_age", "registry", "leaders", "media",
           "decide", "hand_over", "done"]
+GATHER_STAGES = STAGES[: STAGES.index("decide")]
 
 
-def new_job(store: Store, request: dict) -> str:
-    job_id = "job_" + datetime.now().strftime("%m%d_%H%M%S") + "_" + uuid.uuid4().hex[:4]
-    store.create_job(job_id, request, STAGES[0])
+def new_job(store: Store, request: dict, job_id: str | None = None) -> str:
+    """Create a job. A caller-chosen job_id (used by batch runs) makes re-submitting the same
+    request after a crash resume the existing job instead of creating a duplicate."""
+    job_id = job_id or "job_" + datetime.now().strftime("%m%d_%H%M%S") + "_" + uuid.uuid4().hex[:4]
+    if store.job(job_id) is None:
+        store.create_job(job_id, request, STAGES[0])
     return job_id
 
 
@@ -120,7 +125,8 @@ class Pipeline:
             notes.append("No website given: identifying by name only, so a lookalike name is more likely.")
         if not r.get("name"):
             notes.append("No vendor name given: cannot compare the claimed name with the record.")
-        out = {"name": r.get("name"), "domain": domain, "notes": notes}
+        gstin = (r.get("gstin") or "").strip().upper() or None
+        out = {"name": r.get("name"), "domain": domain, "gstin": gstin, "notes": notes}
         if not domain and not r.get("name"):
             out["_stop"] = True
             out["missing"] = "The request has neither a vendor name nor a website."
@@ -135,6 +141,9 @@ class Pipeline:
             ("identify company", est["/company/identify"]),
             ("enrich company (founders, headcount, news)", est["/company/enrich"]),
             ("domain registration date (RDAP)", est["rdap"]),
+            (f"read GSTIN from up to {self.cfg.get('registry', {}).get('max_pages', 1)} website page(s)",
+             self.cfg.get("registry", {}).get("max_pages", 1) * est["/web/enrich/live"]),
+            ("GST registry lookup", est.get("/gstin", 0)),
             (f"confirm up to {p} leaders", p * est["/person/enrich"]),
             (f"news search: company + {p} leaders", (1 + p) * est["/web/search/live"]),
             (f"fetch up to {m} articles", m * est["/web/enrich/live"]),
@@ -153,59 +162,95 @@ class Pipeline:
         if (res is None or res.status == NOT_FOUND) and req["name"]:
             res, by = self.cd.identify(name=req["name"]), "name"
         if res.status != FOUND:
-            return {"status": res.status, "by": by, "error": res.error,
-                    "missing": f"Company Identify by {by} returned {res.status}"}
+            # Even with no company record, the same website asked twice is still a duplicate.
+            return self._with_duplicates({"status": res.status, "by": by, "error": res.error,
+                                          "missing": f"Company Identify by {by} returned {res.status}"},
+                                         [req["domain"]] if req["domain"] else [])
 
         matches = res.data[0]["matches"]
-        cands = [{"i": i, "confidence": m.get("confidence_score"),
-                  "id": m["company_data"].get("crustdata_company_id"),
-                  "name": m["company_data"].get("basic_info", {}).get("name"),
-                  "domain": m["company_data"].get("basic_info", {}).get("primary_domain"),
-                  "employees": m["company_data"].get("basic_info", {}).get("employee_count_range")}
-                 for i, m in enumerate(matches)]
+        cands = []
+        for i, m in enumerate(matches):
+            info = m["company_data"].get("basic_info", {}) or {}
+            domains = {names.domain_of(d) for d in (info.get("all_domains") or [])}
+            domains |= {names.domain_of(info.get("primary_domain")), names.domain_of(info.get("website"))}
+            cands.append({"i": i, "confidence": m.get("confidence_score"),
+                          "id": m["company_data"].get("crustdata_company_id"),
+                          "name": info.get("name"),
+                          "domain": names.domain_of(info.get("primary_domain")),
+                          "all_domains": sorted(d for d in domains if d),
+                          "employees": info.get("employee_count_range"),
+                          "name_similarity": names.similarity(req["name"], info.get("name")) if req["name"] else None})
         icfg = self.cfg["identity"]
-        for c in cands:
-            c["name_similarity"] = names.similarity(req["name"], c["name"]) if req["name"] else None
         top = cands[0]
-        exact_domain = bool(req["domain"]) and (top["domain"] or "").lower() == req["domain"]
-        close = [c for c in cands[1:] if top["confidence"] - (c["confidence"] or 0) < icfg["ambiguity_gap"]]
-        resolved = (top["confidence"] or 0) >= icfg["min_confidence"] and (exact_domain or not close)
         similar_records = []
-        if not resolved and by == "name":
-            # Name-only lookups score every candidate the same (0.6 seen live). If the close
-            # candidates that have a website all share ONE website, that is one business.
-            # Name search returns many unrelated candidates at the same score (25 seen live, incl.
-            # "Tyson Foods"), so only candidates carrying every distinctive word of the name count.
-            group = [c for c in cands if names.names_same_business(req["name"], c["name"])]
-            sites = {c["domain"] for c in group if c["domain"]}
+
+        if by == "name":
+            # Name-only lookups score every candidate the same (0.6 seen live) and pad the answer with
+            # unrelated firms (Reliance, ITC, "Tyson Foods" ...). Only candidates carrying every
+            # distinctive word of the name, and reasonably similar overall, count as this business.
+            group = [c for c in cands if names.names_same_business(req["name"], c["name"])
+                     and (c["name_similarity"] or 0) >= icfg["min_name_similarity"]]
             # Several records can share one website (seen: "Shakti Bhog" 201-500 staff, "Shakti Bhog
-            # Food" 3 staff); take the biggest, which is the main profile.
-            best = max(group, key=lambda c: (bool(c["domain"]), names.headcount_rank(c.get("employees")),
-                                             c["name_similarity"] or 0)) if group else None
-            if best and len(sites) == 1:
-                top, resolved = best, True
-                similar_records = [f"{c['name']} ({c['domain'] or 'no website'})" for c in group
-                                   if c["id"] != best["id"] and c["domain"] != best["domain"]]
+            # Food" 3 staff); the biggest is the main profile.
+            rank = lambda c: (bool(c["domain"]), names.headcount_rank(c.get("employees")), c["name_similarity"] or 0)
+            sites = {c["domain"] for c in group if c["domain"]}
+            if not group:
+                top = max(cands, key=lambda c: c["name_similarity"] or 0)
+                status = "NAME_UNCONFIRMED"      # no record really carries this name: cannot verify, no accusation
+            elif req["domain"]:
+                # Identify by the WEBSITE found nothing, so the request's website is unknown to the source.
+                same_site = [c for c in group if req["domain"] in c["all_domains"]]
+                top = same_site[0] if same_site else max(group, key=rank)
+                if same_site:
+                    status = "RESOLVED"
+                elif top["all_domains"]:
+                    # The NAME matches a firm with another website: the lookalike pattern.
+                    # Never borrow the real firm's evidence for this vendor.
+                    status = "DOMAIN_MISMATCH"
+                else:
+                    status = "NAME_UNCONFIRMED"  # the namesake record has no website to compare with
+            else:
+                top = max(group, key=rank)
+                status = "RESOLVED" if len(sites) == 1 else "AMBIGUOUS"
+                if status == "RESOLVED":
+                    similar_records = [f"{c['name']} ({c['domain'] or 'no website'})" for c in group
+                                       if c["id"] != top["id"] and c["domain"] != top["domain"]]
+            candidates_shown = (group or cands)[:5]
+        else:
+            exact = bool(req["domain"]) and req["domain"] in top["all_domains"]
+            close = [c for c in cands[1:]
+                     if (top["confidence"] or 0) - (c["confidence"] or 0) < icfg["ambiguity_gap"]]
+            resolved = (top["confidence"] or 0) >= icfg["min_confidence"] and (exact or not close)
+            status = "RESOLVED" if resolved else "AMBIGUOUS"
+            candidates_shown = cands[:5]
+        sim = top["name_similarity"]
+        exact_domain = bool(req["domain"]) and req["domain"] in top["all_domains"]
 
         base = f"[0].matches[{top['i']}].company_data"
         self.ev.field("identify", "Company record matched to the request", res, f"{base}.basic_info.name")
         self.ev.field("identify", "Primary domain on the company record", res, f"{base}.basic_info.primary_domain")
         self.ev.field("identify", "Match confidence", res, f"[0].matches[{top['i']}].confidence_score")
 
-        sim = names.similarity(req["name"], top["name"]) if req["name"] else None
-        keys = [f"cd:{top['id']}", req["domain"] or top["domain"]]
+        out = {"status": status, "by": by, "top": top, "candidates": candidates_shown,
+               "exact_domain": exact_domain, "name_similarity": sim, "similar_records": similar_records}
+        if status in ("RESOLVED", "AMBIGUOUS"):
+            keys = [f"cd:{top['id']}", req["domain"] or top["domain"]]
+        else:
+            keys = [req["domain"]] if req["domain"] else []    # only the vendor's own website identifies it
+        return self._with_duplicates(out, keys)
+
+    def _with_duplicates(self, out: dict, keys: list[str]) -> dict:
+        """Duplicate check on the normalised domain and the Crustdata company ID: against the vendor
+        register (already approved or rejected) and against other open jobs."""
+        keys = [k for k in keys if k]
         dup_reg = self.store.register_lookup(keys)
         dup_job = self.store.earlier_job_for(self.job_id, keys)
-        return {
-            "status": "RESOLVED" if resolved else "AMBIGUOUS", "by": by, "top": top,
-            "candidates": ([c for c in cands if names.names_same_business(req["name"], c["name"])] or cands)[:5]
-                          if by == "name" else cands[:5],
-            "exact_domain": exact_domain, "name_similarity": sim,
-            "similar_records": similar_records,
-            "company_keys": keys,
-            "duplicate_of": (dict(dup_reg) if dup_reg else None),
-            "earlier_job": ({"id": dup_job["id"], "verdict": dup_job["verdict"]} if dup_job else None),
-        }
+        out.update(company_keys=keys,
+                   duplicate_of=dict(dup_reg) if dup_reg else None,
+                   earlier_job={"id": dup_job["id"], "verdict": dup_job["verdict"]} if dup_job else None)
+        if dup_reg or dup_job:
+            out["_stop"] = True     # a duplicate is held for a person; no need to pay for the rest
+        return out
 
     # ------------------------------------------------------------------ 3. gather: enrich
     def s_enrich(self) -> dict:
@@ -285,7 +330,8 @@ class Pipeline:
         out["news"] = [{"title": n.get("article_title"), "url": n.get("article_url"),
                         "date": n.get("article_publish_date")} for n in news[:10] if isinstance(n, dict)]
         if out["news"]:
-            f("Most recent news article on the company record", "news[0].article_title")
+            self.ev.field("enrich", "Most recent news article on the company record", res,
+                          f"{b}.news[0].article_title", record_date=out["news"][0]["date"])
         return out
 
     # ------------------------------------------------------------------ 3. gather: domain age
@@ -298,11 +344,76 @@ class Pipeline:
             return {"status": res.status, "error": res.error, "missing": f"Domain registry (RDAP) for {domain}"}
         for i, e in enumerate(res.data.get("events") or []):
             if e.get("eventAction") == "registration":
-                date = self.ev.field("domain_age", f"Domain {domain} registration date", res, f"events[{i}].eventDate")
+                date = self.ev.field("domain_age", f"Domain {domain} registration date", res,
+                                     f"events[{i}].eventDate", record_date=e.get("eventDate"))
                 d = datetime.fromisoformat(date.replace("Z", "+00:00"))
                 return {"status": "FOUND", "domain": domain, "registered": date,
                         "age_days": (datetime.now(timezone.utc) - d).days}
         return {"status": "NOT_FOUND", "missing": f"RDAP record for {domain} has no registration date"}
+
+    # ------------------------------------------------------------------ 3. gather: registry (GST)
+    def s_registry(self) -> dict:
+        """GSTINs shown on the vendor's own website, checked with the GSTIN checksum and then
+        against the GST registry. The website is a claim; the registry is the record."""
+        from .crustdata import gst_verify
+        ident, req, rcfg = self.out("identify") or {}, self.out("take_request"), self.cfg.get("registry", {})
+        domain = req.get("domain") or ((ident.get("top") or {}).get("domain")
+                                       if ident.get("status") == "RESOLVED" else None)
+        pages, gstins = [], []
+        if req.get("gstin"):
+            gstins.append(req["gstin"])          # given on the vendor's onboarding form (a claim, like the website)
+        if not domain and not gstins:
+            return {"status": "SKIPPED", "reason": "no website or GSTIN given"}
+
+        for path in ([] if gstins or not domain else rcfg.get("website_paths", [""])[: rcfg.get("max_pages", 1)]):
+            url = f"https://{domain}/{path}".rstrip("/")
+            page = self.cd.web_fetch(url)
+            pages.append({"url": url, "status": page.status, "error": page.error})
+            if page.status != FOUND:
+                continue
+            text = html_to_text(((page.data or [{}])[0] or {}).get("content") or "")
+            for gstin in names.find_gstins(text):
+                if gstin in gstins:
+                    continue
+                gstins.append(gstin)
+                self.ev.passage("registry", "GSTIN shown on the vendor's own website", gstin, page, text,
+                                snippet_around(text, gstin, 80), url)
+            if gstins:
+                break
+        if not gstins and not any(p["status"] == FOUND for p in pages):
+            return {"status": "UNAVAILABLE", "pages": pages, "gstins": [],
+                    "missing": f"the vendor's website ({domain}) could not be fetched"}
+
+        checked = []
+        for gstin in gstins[:2]:
+            item = {"gstin": gstin, "checksum_ok": names.gstin_checksum_ok(gstin),
+                    "state_code": gstin[:2], "pan_holder_type": names.pan_holder_type(gstin)}
+            if not item["checksum_ok"]:
+                item["registry"] = "NOT_CHECKED"
+                checked.append(item)
+                continue
+            res = gst_verify(self.client, self.cfg, gstin)
+            if res is None:
+                item.update(registry="NOT_CONFIGURED", why="no GST registry key configured")
+            elif res.status != FOUND or not isinstance(res.data, dict):
+                item.update(registry=res.status, why=res.error or "registry did not answer")
+            else:
+                prefix = "data." if isinstance(res.data.get("data"), dict) else ""
+                rec = res.data.get("data") if prefix else res.data
+                reg_date = rec.get("date_of_registration")
+                g = lambda claim, key: self.ev.field("registry", claim, res, prefix + key, record_date=reg_date)
+                item.update(
+                    registry="FOUND",
+                    valid=rec.get("valid"),
+                    status=g(f"GST registration status of {gstin}", "gst_in_status"),
+                    legal_name=g(f"Legal name on GST registration {gstin}", "legal_name_of_business"),
+                    trade_name=g(f"Trade name on GST registration {gstin}", "trade_name_of_business"),
+                    registered=g(f"Date of GST registration {gstin}", "date_of_registration"),
+                    constitution=g(f"Constitution of business on GST registration {gstin}",
+                                   "constitution_of_business"),
+                )
+            checked.append(item)
+        return {"status": "DONE", "pages": pages, "gstins": checked}
 
     # ------------------------------------------------------------------ 3. gather: who runs it
     def s_leaders(self) -> dict:
@@ -339,8 +450,13 @@ class Pipeline:
     # ------------------------------------------------------------------ 3. gather: adverse media (5.2)
     def s_media(self) -> dict:
         mcfg = self.cfg["media"]
-        terms = [t.lower() for t in mcfg["adverse_terms"]]
+        term_patterns = [(term.strip(), re.compile(r"\b" + re.escape(term.strip().lower()) + r"\b"))
+                         for term in mcfg["adverse_terms"]]
+        victim_markers = [marker.lower() for marker in mcfg.get("victim_context", [])]
         enr, ident, req = self.out("enrich") or {}, self.out("identify") or {}, self.out("take_request")
+        if ident.get("status") not in ("RESOLVED", "AMBIGUOUS"):
+            return {"status": "SKIPPED", "reason": "identity not resolved: news about the matched name "
+                                                   "could be about a different firm"}
         company = enr.get("name") or (ident.get("top") or {}).get("name") or req.get("name")
         domain = req.get("domain") or (ident.get("top") or {}).get("domain")
         if not company:
@@ -348,6 +464,11 @@ class Pipeline:
         leaders = [l["name"] for l in (self.out("leaders") or {}).get("leaders", [])]
         subjects = [("company", names.search_name(company))] + [("person", n) for n in leaders]
         core = names.core_name(company)
+
+        def sentence_names(kind: str, subject: str, sentence: str) -> bool:
+            if kind == "company":
+                return names.mentions_business(subject, sentence)
+            return re.search(r"\b" + re.escape(subject.lower()) + r"\b", sentence.lower()) is not None
 
         findings, fetched = [], 0
         # One combined search for the company and every leader (one call instead of 1 + N:
@@ -358,45 +479,53 @@ class Pipeline:
         searches = [{"subject": ", ".join(n for _, n in subjects), "query": q,
                      "status": res.status, "error": res.error}]
         results = (res.data.get("results") or []) if res.status == FOUND and isinstance(res.data, dict) else []
+        pages: dict[str, tuple] = {}            # url -> (Result, text, blocked reason): each article read once
+
         for ri, r in enumerate(results[: mcfg["max_results_per_query"]]):
-            blob = f"{r.get('title') or ''} {r.get('snippet') or ''}".lower()
-            hit_terms = [t for t in terms if t in blob]
-            if not hit_terms:
-                continue
+            blob = f"{r.get('title') or ''}. {r.get('snippet') or ''}"
+            sentences = [s for s in re.split(r"(?<=[.!?])\s+|\n", blob) if s.strip()]
+            published = r.get("date") or r.get("published_date") or r.get("publish_date")   # not given live
+            is_victim = any(marker in blob.lower() for marker in victim_markers)
             for kind, subject in subjects:
-                if kind == "company":
-                    named = names.mentions_business(subject, blob)
-                else:
-                    named = subject.lower() in blob
-                if not named:
+                # The adverse word must sit in the SAME sentence as the name, as a whole word:
+                # "by default", or "fraud" two sentences away from the name, is not news about them.
+                naming = [s for s in sentences if sentence_names(kind, subject, s)]
+                hit_terms = sorted({term for s in naming for term, rx in term_patterns if rx.search(s.lower())})
+                if not hit_terms:
                     continue
                 item = {"subject": subject, "kind": kind, "title": (r.get("title") or "")[:200],
-                        "url": r.get("url"), "terms": hit_terms}
+                        "url": r.get("url"), "terms": hit_terms, "published": published}
+                if is_victim:
+                    item.update(link="NOT_ADVERSE", clearance="weak",
+                                why="the vendor appears as the victim or is being impersonated, not accused")
+                    findings.append(item)
+                    continue
                 if kind == "company":
                     # The headline itself names the vendor next to an adverse term: that is the link.
                     # (Namesake clearing is for people; a person reviews company-name collisions.)
                     self.ev.field("media", f"News headline naming {subject}", res, f"results[{ri}].title",
-                                  source_url=r.get("url"))
+                                  source_url=r.get("url"), record_date=published)
                     item.update(link="LINKED", why=f"the headline names {subject}")
                     findings.append(item)
                     continue
-                if fetched >= mcfg["max_articles_fetched"]:
-                    item.update(link="UNRESOLVED", why="article not read: fetch limit reached")
-                    findings.append(item)
-                    continue
-                fetched += 1
-                page = self.cd.web_fetch(r["url"])
+                if r["url"] not in pages:
+                    if fetched >= mcfg["max_articles_fetched"]:
+                        item.update(link="UNRESOLVED", why="article not read: fetch limit reached")
+                        findings.append(item)
+                        continue
+                    fetched += 1
+                    page = self.cd.web_fetch(r["url"])
+                    entry = ((page.data or [{}])[0] or {}) if page.status == FOUND else {}
+                    pages[r["url"]] = (page, html_to_text(entry.get("content") or ""), blocked_reason(entry))
+                page, text, blocked = pages[r["url"]]
                 if page.status != FOUND:
                     item.update(link="UNRESOLVED", why=f"article could not be fetched ({page.status})")
                     findings.append(item)
                     continue
-                entry = page.data[0] or {}
-                blocked = blocked_reason(entry)
                 if blocked:          # a block page is not the article: never clear a namesake from it
                     item.update(link="UNRESOLVED", why=f"site blocked automated reading ({blocked})")
                     findings.append(item)
                     continue
-                text = html_to_text(entry.get("content") or "")
                 if subject.lower() not in text.lower():
                     # We did not read the article (other language, redirect, paywall). Absence of the
                     # vendor's name in text we could not read is not evidence of a namesake.
@@ -405,25 +534,25 @@ class Pipeline:
                     findings.append(item)
                     continue
                 mentions_vendor = (core and core in names.core_name(text)) or (domain and domain in text.lower())
-                linked = mentions_vendor
                 passage = snippet_around(text, subject) or snippet_around(text, hit_terms[0])
-                if linked:
+                if mentions_vendor:
                     item.update(link="LINKED", why=f"article names {subject} and the vendor ({company})")
                     self.ev.passage("media", f"Adverse news linked to {subject}", item["title"], page, text,
-                                    passage, r["url"])
+                                    passage, r["url"], record_date=published)
                 else:
-                    item.update(link="NAMESAKE_CLEARED",
+                    item.update(link="NAMESAKE_CLEARED", clearance="weak",
                                 why=f"article names a '{subject}' but never mentions {company} or {domain}; "
-                                    "treated as a different person or firm")
+                                    "treated as a different person (weak clearance: based on absence, "
+                                    "a person should confirm)")
                     self.ev.passage("media", f"News about a namesake of {subject}, not linked to the vendor",
-                                    item["title"], page, text, passage, r["url"])
+                                    item["title"], page, text, passage, r["url"], record_date=published)
                 findings.append(item)
         return {"status": "DONE", "searches": searches, "findings": findings}
 
     # ------------------------------------------------------------------ 4. decide
     def s_decide(self) -> dict:
         from .rules import decide
-        return decide(self.cfg, {s: self.out(s) for s in STAGES[:7]})
+        return decide(self.cfg, {s: self.out(s) for s in GATHER_STAGES})
 
     # ------------------------------------------------------------------ 5. act, or hand over
     def s_hand_over(self) -> dict:

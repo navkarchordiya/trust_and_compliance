@@ -85,3 +85,47 @@ def headcount_rank(employee_count_range: str | None) -> int:
     """'201-500' -> 500, '10001+' -> 10001, None -> 0."""
     nums = re.findall(r"\d+", employee_count_range or "")
     return int(nums[-1]) if nums else 0
+# ---------------------------------------------------------------- GSTIN (Indian GST registration number)
+# Layout: 2-digit state code, 10-char PAN, entity number, 'Z', check character.
+GSTIN_RE = re.compile(r"\b(\d{2}[A-Z]{5}\d{4}[A-Z][1-9A-Z]Z[0-9A-Z])\b")
+_GST_CHARS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+
+# 4th character of the PAN inside the GSTIN says what kind of taxpayer holds it.
+PAN_HOLDER_TYPES = {"C": "company", "F": "firm / LLP", "P": "individual", "H": "Hindu undivided family",
+                    "A": "association of persons", "T": "trust", "B": "body of individuals",
+                    "G": "government", "J": "artificial juridical person", "L": "local authority"}
+
+
+def gstin_checksum_ok(gstin: str) -> bool:
+    """The official GSTIN check-character algorithm (mod 36, alternating weights 1 and 2)."""
+    gstin = (gstin or "").upper()
+    if not GSTIN_RE.fullmatch(gstin):
+        return False
+    total = 0
+    for position, char in enumerate(gstin[:14]):
+        weight = 1 if position % 2 == 0 else 2
+        product = _GST_CHARS.index(char) * weight
+        total += product // 36 + product % 36
+    check_char = _GST_CHARS[(36 - total % 36) % 36]
+    return gstin[14] == check_char
+
+
+def find_gstins(text: str) -> list[str]:
+    """Every distinct GSTIN-shaped string in the text, in order of appearance."""
+    seen, found = set(), []
+    for match in GSTIN_RE.finditer((text or "").upper()):
+        gstin = match.group(1)
+        if gstin not in seen:
+            seen.add(gstin)
+            found.append(gstin)
+    return found
+
+
+def pan_holder_type(gstin: str) -> str | None:
+    return PAN_HOLDER_TYPES.get((gstin or "   ")[5:6].upper()) if gstin and len(gstin) >= 6 else None
+
+
+def claims_company(name: str | None) -> bool:
+    """True when the name itself says it is a company (Pvt Ltd, Limited, ...)."""
+    words = set(re.sub(r"[^a-z ]+", " ", (name or "").lower()).split())
+    return bool(words & {"pvt", "private", "limited", "ltd"})

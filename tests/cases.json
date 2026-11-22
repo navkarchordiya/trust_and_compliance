@@ -1,0 +1,12 @@
+[
+  {"case": "honest established firm", "name": "Delhivery Limited", "website": "delhivery.com",
+   "expected": "REAL_AND_TRADING"},
+  {"case": "lookalike website for a known name", "name": "Delhivery Limited", "website": "delhivery-logistics-india.com",
+   "expected": "HOLD_FOR_REVIEW|FRONT_SUSPECTED|CANNOT_VERIFY"},
+  {"case": "same vendor again (duplicate)", "name": "DELHIVERY LTD", "website": "https://www.delhivery.com/",
+   "expected": "HOLD_FOR_REVIEW"},
+  {"case": "plain-words request", "text": "New carrier to onboard: 'Blue Dart Express Limited', bluedart.com. Is it real?",
+   "expected": "REAL_AND_TRADING|HOLD_FOR_REVIEW"},
+  {"case": "no record anywhere", "name": "Sharma Trading Co", "website": "sharma-trading-co-2026.in",
+   "expected": "CANNOT_VERIFY"}
+]

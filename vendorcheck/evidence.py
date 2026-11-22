@@ -58,8 +58,11 @@ class Evidence:
     def __init__(self, store: Store, job_id: str):
         self.store, self.job_id = store, job_id
 
-    def field(self, stage: str, claim: str, res: Result, path: str, source_url: str | None = None):
-        """Record a fact read from a JSON field. Returns the value, or None if the field is absent."""
+    def field(self, stage: str, claim: str, res: Result, path: str, source_url: str | None = None,
+              record_date: str | None = None):
+        """Record a fact read from a JSON field. Returns the value, or None if the field is absent.
+        record_date is the date the source gives for the record (e.g. an article's publish date);
+        retrieved_at is always when we fetched it."""
         try:
             value = get_path(res.data, path)
         except (KeyError, IndexError, TypeError):
@@ -68,18 +71,18 @@ class Evidence:
             return None
         self.store.add_fact(job_id=self.job_id, stage=stage, claim=claim, value_json=json.dumps(value),
                             source_url=source_url or res.url, locator=path, quote=json.dumps(value)[:500],
-                            retrieved_at=res.retrieved_at, call_id=res.call_id)
+                            retrieved_at=res.retrieved_at, call_id=res.call_id, record_date=record_date)
         return value
 
     def passage(self, stage: str, claim: str, value, res: Result, page_text: str, passage: str,
-                source_url: str) -> bool:
+                source_url: str, record_date: str | None = None) -> bool:
         """Record a fact backed by a passage. Refuses if the passage is not verbatim in the page."""
         passage = norm_ws(passage)
         if not passage or passage.lower() not in page_text.lower():
             return False
         self.store.add_fact(job_id=self.job_id, stage=stage, claim=claim, value_json=json.dumps(value),
                             source_url=source_url, locator="passage", quote=passage[:500],
-                            retrieved_at=res.retrieved_at, call_id=res.call_id)
+                            retrieved_at=res.retrieved_at, call_id=res.call_id, record_date=record_date)
         return True
 
 

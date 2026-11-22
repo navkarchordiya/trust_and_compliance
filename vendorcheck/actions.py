@@ -47,10 +47,11 @@ def decide_approval(store: Store, job_id: str, by: str, action: str | None = Non
                    "domain": req.get("domain") or top.get("domain"), "verdict": job["verdict"], "approved_by": by}
         db.execute("INSERT INTO actions (idempotency_key, job_id, action, payload_json, done_at) VALUES (?,?,?,?,?)",
                    (key, job_id, action, json.dumps(payload), now_iso()))
-        db.execute("INSERT OR REPLACE INTO vendor_register (company_key, name, domain, decision, job_id, decided_at) "
-                   "VALUES (?,?,?,?,?,?)",
-                   (company_key, payload["name"], payload["domain"],
-                    "approved" if action == "add_to_approved_vendors" else "rejected", job_id, now_iso()))
+        decision = "approved" if action == "add_to_approved_vendors" else "rejected"
+        for register_key in {company_key, payload["domain"]} - {None, ""}:
+            db.execute("INSERT OR REPLACE INTO vendor_register (company_key, name, domain, decision, job_id, "
+                       "decided_at) VALUES (?,?,?,?,?,?)",
+                       (register_key, payload["name"], payload["domain"], decision, job_id, now_iso()))
         db.execute("INSERT OR IGNORE INTO outbox (idempotency_key, to_team, body, created_at) VALUES (?,?,?,?)",
                    (key + ":notify", "procurement-team",
                     f"{payload['name']} ({payload['domain']}): {action} approved by {by}.", now_iso()))

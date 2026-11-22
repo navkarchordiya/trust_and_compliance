@@ -9,6 +9,9 @@
   python -m vendorcheck decline JOB --by "Vedant"
   python -m vendorcheck ledger JOB        # every call, its status and its cost
   python -m vendorcheck raw CALL_ID       # the stored raw response behind a fact
+  python -m vendorcheck batch FILE        # JSON or CSV of requests; restart-safe
+  python -m vendorcheck eval FILE         # batch + compare with each row's expected verdict
+  python -m vendorcheck outbox            # internal notifications written so far
 """
 import argparse
 import json
@@ -18,7 +21,8 @@ import sys
 from .actions import decide_approval
 from .config import load_config, load_env
 from .pipeline import Pipeline, new_job
-from .report import build_result, render_text
+from .batch import print_eval, run_batch
+from .report import build_result, render_text, save_result
 from .store import Store
 
 
@@ -33,6 +37,7 @@ def main(argv=None):
     r.add_argument("--name")
     r.add_argument("--website")
     r.add_argument("--text")
+    r.add_argument("--gstin", help="GSTIN from the vendor's onboarding form (optional)")
     r.add_argument("--json", action="store_true")
     sub.add_parser("resume")
     s = sub.add_parser("show")
@@ -50,16 +55,22 @@ def main(argv=None):
     l.add_argument("job")
     w = sub.add_parser("raw")
     w.add_argument("call_id", type=int)
+    b = sub.add_parser("batch")
+    b.add_argument("file")
+    e = sub.add_parser("eval")
+    e.add_argument("file")
+    sub.add_parser("outbox")
     args = ap.parse_args(argv)
 
     store = Store(args.db)
     pipe = Pipeline(store, cfg, log=lambda m: print(m, file=sys.stderr))
 
     def show(job_id, as_json=False):
+        save_result(store, cfg, job_id)
         res = build_result(store, cfg, job_id)
         print(json.dumps(res, indent=2, ensure_ascii=False) if as_json else render_text(res))
 
-    if args.cmd in ("run", "resume") and not os.environ.get("CRUSTDATA_API_KEY"):
+    if args.cmd in ("run", "resume", "batch", "eval") and not os.environ.get("CRUSTDATA_API_KEY"):
         print("WARNING: CRUSTDATA_API_KEY is not set (copy .env.example to .env). "
               "Crustdata checks will come back as 'cannot verify'.", file=sys.stderr)
 
@@ -67,7 +78,8 @@ def main(argv=None):
         if not (args.name or args.website or args.text):
             ap.error("give --name/--website or --text")
         job_id = new_job(store, {k: v for k, v in
-                                 {"name": args.name, "website": args.website, "text": args.text}.items() if v})
+                                 {"name": args.name, "website": args.website, "text": args.text,
+                                  "gstin": args.gstin}.items() if v})
         print(f"started {job_id}", file=sys.stderr)
         pipe.run(job_id)
         show(job_id, args.json)
@@ -94,8 +106,17 @@ def main(argv=None):
         for c in store.ledger(args.job):
             total += c["credits"]
             print(f"#{c['id']:<4} {c['source']:<10} {c['endpoint']:<20} {c['status']:<15} "
-                  f"{c['credits']:>5} cr  {c['attempts']} try  {c['latency_ms'] or 0:>6} ms  {c['retrieved_at']}")
-        print(f"total {round(total, 3)} credits")
+                  f"{c['credits']:>5} cr ({c['credits_source'] or '-':<9})  {c['attempts']} try  "
+                  f"{c['latency_ms'] or 0:>6} ms  {c['retrieved_at']}")
+        inr = round(total * cfg.get("cost", {}).get("inr_per_credit", 0), 2)
+        print(f"total {round(total, 3)} credits  ≈ ₹{inr} (at ₹{cfg.get('cost', {}).get('inr_per_credit')}/credit)")
+    elif args.cmd == "batch":
+        run_batch(store, cfg, pipe, args.file, log=lambda m: print(m, file=sys.stderr))
+    elif args.cmd == "eval":
+        sys.exit(print_eval(run_batch(store, cfg, pipe, args.file, log=lambda m: print(m, file=sys.stderr))))
+    elif args.cmd == "outbox":
+        for row in store.db.execute("SELECT * FROM outbox ORDER BY created_at"):
+            print(f"{row['created_at']}  to {row['to_team']:<20} {row['body']}")
     elif args.cmd == "raw":
         c = store.call(args.call_id)
         if not c:

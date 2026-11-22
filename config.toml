@@ -15,18 +15,20 @@ http_timeout_s = 25
 max_retries = 3                # per call, on timeout / 5xx / 429
 backoff_s = 2.0
 
-[credit_estimates]             # used only when a response has no x-credits-used header
-"/company/identify" = 0.2
+[credit_estimates]             # used only when a response has no X-Credits-Used header (ledger marks these "estimated")
+"/company/identify" = 0     # free (docs.crustdata.com/general/pricing)
 "/company/enrich" = 2
 "/person/enrich" = 1
 "/web/search/live" = 1
 "/web/enrich/live" = 1
 "rdap" = 0
+"/gstin" = 0
 
 [identity]
 min_confidence = 0.7           # Identify confidence below this = not resolved
 ambiguity_gap = 0.05           # two candidates closer than this = ambiguous (lookalike)
 min_name_similarity = 0.6      # requested name vs record name
+name_only_min_similarity = 0.85  # with no website, a name match below this is not accepted (lookalike risk)
 
 [age]
 young_domain_days = 180        # domain younger than this is a weak signal
@@ -44,9 +46,28 @@ max_results_per_query = 10
 max_articles_fetched = 4
 country = "IN"
 query_terms = ["fraud", "scam", "arrested", "raid", "\"shell company\"", "FIR", "jail"]
-adverse_terms = ["jail", "sentenced", "fir ", "eow", "cbi", "probe", "contempt", "fraud", "scam", "arrested", "arrest", "raid", "cheating", "money laundering",
+adverse_terms = ["jail", "sentenced", "fir", "eow", "cbi", "probe", "contempt", "fraud", "scam", "arrested", "arrest", "raid", "cheating", "money laundering",
                  "shell company", "fake invoice", "fake gst", "chargesheet", "absconding",
-                 "default", "insolvency", "ponzi", "sebi order", "enforcement directorate", "ed raid"]
+                 "insolvency", "ponzi", "sebi order", "enforcement directorate", "ed raid"]
+
+# Articles where the vendor is the victim or is being impersonated are not adverse news about it.
+victim_context = ["impersonat", "posing as", "in the name of", "beware of", "fake website",
+                  "fake job", "duped by fake", "cheated by fake", "pretending to be"]
+
+[registry]
+# A GSTIN comes from the request (--gstin, as on an onboarding form) or else from the vendor's own website, checked with the GSTIN checksum, then (if a
+# provider key is set in .env) verified against the GST registry.
+website_paths = [""]           # homepage only: big firms rarely print a GSTIN (checked live), so keep it cheap
+max_pages = 1
+provider = "cashfree"          # "cashfree" or "none"; needs CASHFREE_CLIENT_ID / CASHFREE_CLIENT_SECRET
+cashfree_base_url = "https://sandbox.cashfree.com/verification"   # production: https://api.cashfree.com/verification
+min_legal_name_similarity = 0.6
+
+[cost]
+# Rupee cost of one Crustdata credit. ASSUMPTION: replace with your plan's rate (dashboard, or
+# GET /account/endpoints). Used only to show the cost of each job in rupees.
+inr_per_credit = 8.0
+gst_inr_per_call = 1.0         # ASSUMPTION: per-call price of the GST verification API
 
 [verdict]
 strong_signals_for_front = 2   # this many independent strong signals = FRONT_SUSPECTED
@@ -55,4 +76,4 @@ strong_signals_for_front = 2   # this many independent strong signals = FRONT_SU
 # Fields included in the result. Add/remove here when the output format changes.
 fields = ["job_id", "request", "verdict", "recommended_action", "approval",
           "who_runs_it", "how_long_it_has_existed", "is_trading", "looks_off",
-          "cannot_verify", "facts", "cost"]
+          "cannot_verify", "registry", "facts", "cost"]
