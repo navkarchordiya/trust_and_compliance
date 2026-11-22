@@ -358,3 +358,12 @@ class TestRealIdentifySharma(Base):
         self.assertEqual(r["verdict"], "CANNOT_VERIFY", r["looks_off"])
         self.assertFalse(r["looks_off"]["strong"])
         self.assertNotIn("/company/enrich", inner.count)
+
+
+class TestApproverList(Base):
+    def test_only_listed_approvers_can_act(self):
+        job, r = self.run_job(Fake(company()))
+        refused = decide_approval(self.store, job, "Random Person", approvers=["Asha Rao"])
+        self.assertIn("not on the approver list", refused)
+        self.assertEqual(self.store.db.execute("SELECT COUNT(*) c FROM actions").fetchone()["c"], 0)
+        self.assertIn("done", decide_approval(self.store, job, "asha rao", approvers=["Asha Rao"]))

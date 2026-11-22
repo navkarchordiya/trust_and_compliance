@@ -121,9 +121,11 @@ def main(argv=None):
                                     "WHERE a.status='pending'"):
             print(f"{row['job_id']}  {row['verdict']:<17} recommend {row['recommended_action']:<24} {row['reason']}")
     elif args.cmd == "approve":
-        print(decide_approval(store, args.job, args.by, args.action, reason=args.reason))
+        print(decide_approval(store, args.job, args.by, args.action, reason=args.reason,
+                              approvers=cfg.get("approvals", {}).get("approvers")))
     elif args.cmd == "decline":
-        print(decide_approval(store, args.job, args.by, decline=True, reason=args.reason))
+        print(decide_approval(store, args.job, args.by, decline=True, reason=args.reason,
+                              approvers=cfg.get("approvals", {}).get("approvers")))
     elif args.cmd == "import-vendors":
         from .batch import import_vendors
         print(import_vendors(store, args.file))

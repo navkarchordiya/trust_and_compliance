@@ -4,7 +4,15 @@ Used by the review app (python -m vendorcheck serve) and by `python -m vendorche
 Everything that came from outside (names, titles, quotes) is HTML-escaped before it is shown.
 """
 import json
+import re
 from html import escape
+
+LONG_URL = re.compile(r"https?://[^\s)]{60,}")
+
+
+def shorten_urls(text: str) -> str:
+    """Display only: very long links (e.g. Google News redirects) are cut; the stored result keeps them whole."""
+    return LONG_URL.sub(lambda m: m.group(0)[:55] + "…", text)
 
 VERDICT_STYLE = {
     "REAL_AND_TRADING": ("#0f7b3f", "Real and trading"),
@@ -42,7 +50,8 @@ input, select, textarea { font: inherit; padding: 7px 9px; border: 1px solid #d0
 button { font: inherit; padding: 8px 14px; border: 0; border-radius: 6px; background: #1d4ed8; color: white;
          cursor: pointer; font-weight: 600; }
 button.secondary { background: #475467; }
-.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
+.grid > div, li, td { min-width: 0; overflow-wrap: anywhere; }
 .notice { padding: 10px 14px; border-radius: 8px; background: #eef4ff; border: 1px solid #c7d7fe; }
 pre { background: #0b1220; color: #d1e0ff; padding: 14px; border-radius: 8px; overflow: auto; font-size: 12px; }
 """
@@ -64,7 +73,7 @@ def verdict_badge(verdict: str | None) -> str:
 def bullet_list(items, css_class: str = "") -> str:
     if not items:
         return "<p class='muted'>None.</p>"
-    return f"<ul class='{css_class}'>" + "".join(f"<li>{escape(str(i))}</li>" for i in items) + "</ul>"
+    return f"<ul class='{css_class}'>" + "".join(f"<li>{escape(shorten_urls(str(i)))}</li>" for i in items) + "</ul>"
 
 
 def source_cell(fact: dict, live_links: bool) -> str:
@@ -111,6 +120,10 @@ def render_job(result: dict, live_links: bool = False, message: str = "") -> str
             f"<input name='reason' placeholder='Reason (needed to overrule)' size='34'>"
             f"<button name='decision' value='approve'>Approve</button>"
             f"<button class='secondary' name='decision' value='decline'>Decline</button></form></div>")
+    elif approval and approval.get("status") == "pending":
+        parts.append(f"<div class='card'><h2>Decision</h2><p>Recommended: "
+                     f"<b>{escape(ACTION_LABEL.get(recommended, recommended or '-'))}</b>. "
+                     "Waiting for a person's approval; nothing irreversible has happened.</p></div>")
     elif approval:
         decided = (f"{escape(approval.get('status') or '')} by {escape(approval.get('decided_by') or '-')}"
                    f" ({escape(approval.get('decided_action') or '-')}) at {escape(approval.get('decided_at') or '-')}")
@@ -127,7 +140,7 @@ def render_job(result: dict, live_links: bool = False, message: str = "") -> str
                  "<b>Weak signals</b>" + bullet_list(looks_off.get("weak")) +
                  "</div><div><b>Evidence it is real and trading</b>" + bullet_list(r.get("is_trading")) +
                  "<b>Cannot verify (what is missing)</b>" + bullet_list(r.get("cannot_verify")) +
-                 "<b>Namesakes cleared</b>" + bullet_list(r.get("namesakes_cleared")) +
+                 "<b>Cleared: namesakes and scams in the vendor's name</b>" + bullet_list(r.get("namesakes_cleared")) +
                  "</div></div></div>")
 
     # ---- who runs it and how long it has existed

@@ -13,7 +13,12 @@ ALLOWED = {"add_to_approved_vendors", "reject_vendor"}
 
 
 def decide_approval(store: Store, job_id: str, by: str, action: str | None = None, decline: bool = False,
-                    reason: str | None = None) -> str:
+                    reason: str | None = None, approvers: list[str] | None = None) -> str:
+    by = (by or "").strip()
+    if not by:
+        return f"{job_id}: give your name; every decision records who made it."
+    if approvers and by.lower() not in {a.strip().lower() for a in approvers}:
+        return f"{job_id}: '{by}' is not on the approver list for this client; nothing was done."
     appr = store.db.execute("SELECT * FROM approvals WHERE job_id=?", (job_id,)).fetchone()
     if not appr:
         return f"{job_id}: no approval waiting (has the run reached hand_over?)"

@@ -128,9 +128,11 @@ def make_handler(db_path: str, cfg: dict):
                     if not f.get("by"):
                         message = "Enter your name: every decision records who made it."
                     elif f.get("decision") == "decline":
-                        message = decide_approval(store, job_id, f["by"], decline=True, reason=f.get("reason"))
+                        message = decide_approval(store, job_id, f["by"], decline=True, reason=f.get("reason"),
+                                                  approvers=cfg.get("approvals", {}).get("approvers"))
                     else:
-                        message = decide_approval(store, job_id, f["by"], f.get("action"), reason=f.get("reason"))
+                        message = decide_approval(store, job_id, f["by"], f.get("action"), reason=f.get("reason"),
+                                                  approvers=cfg.get("approvals", {}).get("approvers"))
                     save_result(store, cfg, job_id)
                     return self.send_html(render_job(build_result(store, cfg, job_id), True, message))
                 return self.send_html(page("Not found", "<p>Not found.</p>"), 404)

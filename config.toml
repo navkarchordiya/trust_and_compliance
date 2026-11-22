@@ -81,6 +81,11 @@ min_legal_name_similarity = 0.6
 inr_per_credit = 8.0
 gst_inr_per_call = 1.0         # ASSUMPTION: per-call price of the GST verification API
 
+[approvals]
+# Who may approve or decline. Empty = any named person (the name is always recorded).
+# For the client: list the compliance approvers, e.g. ["Asha Rao", "Vikram Shah"].
+approvers = []
+
 [privacy]
 retention_days = 30            # `purge` deletes raw responses (people's profiles) of closed jobs after this
 

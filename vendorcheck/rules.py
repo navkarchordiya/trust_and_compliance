@@ -230,8 +230,9 @@ def _result(verdict, cannot, strong, weak, positive, answer, req, adverse=(), re
     summary = {
         "REAL_AND_TRADING": f"{who} looks like a real, trading business.",
         "FRONT_SUSPECTED": f"{who} shows {len(strong)} independent red flags of a front company.",
-        "HOLD_FOR_REVIEW": f"{who} needs a person to review: " + "; ".join((strong + adverse + review + weak)[:2]),
-        "CANNOT_VERIFY": f"Cannot verify {who}: " + "; ".join(cannot[:2]),
+        "HOLD_FOR_REVIEW": f"{who} needs a person to review: "
+                           + "; ".join(x.rstrip(".") for x in (strong + adverse + review + weak)[:2]) + ".",
+        "CANNOT_VERIFY": f"Cannot verify {who}: " + "; ".join(x.rstrip(".") for x in cannot[:2]) + ".",
     }[verdict]
     return {"verdict": verdict, "summary": summary,
             "looks_off": {"strong": strong, "adverse_news": adverse, "needs_review": review, "weak": weak},

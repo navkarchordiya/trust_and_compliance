@@ -21,7 +21,7 @@ one, so the check is slow, manual and error-prone.
 ```bash
 python -m vendorcheck run --name "Acme Freight Pvt Ltd" --website acmefreight.in
 python -m vendorcheck run --text "Here is a new vendor: 'Acme Freight', acmefreight.in. Is it real?"
-python -m vendorcheck run --name "Acme Freight Pvt Ltd" --website acmefreight.in --gstin 27AAACA1234A1Z5
+python -m vendorcheck run --name "Acme Freight Pvt Ltd" --website acmefreight.in --gstin 27AAACA1234A1ZK   # example format; use the vendor's real GSTIN
 python -m vendorcheck batch requests.json     # JSON list or CSV (name, website, text, gstin); restart-safe
 python -m vendorcheck eval tests/cases.json   # batch + pass / safe miss / wrong against each row's "expected"
                                               # ("!REAL_AND_TRADING" = a front must never be approved)
@@ -99,6 +99,10 @@ person can reject the vendor, which updates the register.
 | Namesake in the news | Cleared (marked *weak*: based on absence) unless the article also names the vendor | `test_namesake_is_cleared` |
 | Vendor is the victim ("fraudsters posing as …") | Not adverse | `test_vendor_as_victim_is_not_adverse` |
 | Fake or cancelled GSTIN | Check-digit failure or non-active registry status: **strong red flag** | `TestRegistry` |
+
+| Real data: Blue Dart (real, impersonation scams recognised) | Real data: Shakti Bhog (CMD arrested: held) |
+|---|---|
+| ![Blue Dart](docs/screens/blue_dart_real.png) | ![Shakti Bhog](docs/screens/shakti_bhog_hold.png) |
 
 **On real data:** `python scripts/replay_live.py` runs `tests/cases.json` on real Crustdata answers recorded on
 22 Nov 2026 (Delhivery, Blue Dart, Shakti Bhog, a lookalike, a duplicate, an unknown vendor, an ambiguous shell
