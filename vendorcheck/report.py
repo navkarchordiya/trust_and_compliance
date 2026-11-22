@@ -41,6 +41,7 @@ def build_result(store: Store, cfg: dict, job_id: str) -> dict:
         "namesakes_cleared": d.get("namesakes_cleared"),
         "cannot_verify": d.get("cannot_verify"),
         "registry": d.get("registry"),
+        "latest_activity": d.get("latest_activity"),
         "facts": [{"id": f["id"], "claim": f["claim"], "value": json.loads(f["value_json"]),
                    "source": f["source_url"], "field_or_passage": f["locator"], "quote": f["quote"],
                    "record_date": f["record_date"], "retrieved_at": f["retrieved_at"],
@@ -79,13 +80,17 @@ def render_text(r: dict) -> str:
     add("\nWho runs it:")
     for l in r.get("who_runs_it") or []:
         mark = {True: "confirmed", False: "NOT confirmed", None: "cannot verify"}[l.get("confirmed")]
-        add(f"  - {l['name']} — {l.get('current_title') or l.get('title') or '?'}"
+        add(f"  - {l['name']} — {l.get('current_title') or l.get('title') or ('named by the vendor' if l.get('declared') else '?')}"
             + (f", since {l['since']}" if l.get("since") else "") + f" [{mark}]"
             + (f" ({l['why']})" if l.get("why") else ""))
     h = r.get("how_long_it_has_existed") or {}
     add(f"\nHow long it has existed: founded {h.get('year_founded') or '?'}; "
         f"domain registered {(h.get('domain_registered') or '?')[:10]}; "
-        f"earliest founder start {h.get('earliest_founder_start') or '?'}")
+        f"earliest founder start {h.get('earliest_founder_start') or '?'}"
+        + (f"; incorporated {h['year_incorporated']} (CIN {h.get('cin')})" if h.get("year_incorporated") else ""))
+    act = r.get("latest_activity")
+    add("Newest dated activity: " + (f"{act['date']}, {act['what']} ({act['days_before_check']} days before the check)"
+                                     if act else "none on record"))
     add("\nTrading evidence:")
     for p in r.get("is_trading") or []:
         add(f"  + {p}")

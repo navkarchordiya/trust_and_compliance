@@ -47,7 +47,7 @@ def run_batch(store: Store, cfg: dict, pipe: Pipeline, path: str, log=print) -> 
     bid = batch_id(path)
     out = []
     for i, row in enumerate(load_rows(path)):
-        request = {k: row[k] for k in ("name", "website", "text", "gstin") if row.get(k)}
+        request = {k: row[k] for k in ("name", "website", "text", "gstin", "cin", "directors") if row.get(k)}
         if not request:
             log(f"row {i}: no name, website or text; skipped")
             continue

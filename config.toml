@@ -25,6 +25,14 @@ reserve_credits_for_news = 1   # under a tight budget, skip the homepage GSTIN r
 "/web/enrich/live" = 1
 "rdap" = 0
 "/gstin" = 0
+"/job/search" = 0.09           # 0.03 per listing returned, 3 listings
+
+[activity]                     # "is it active NOW": dated job postings (Crustdata Job Search)
+enabled = true
+max_listings = 3
+recent_days = 180              # a posting or news article newer than this is dated proof of activity
+require_recent_activity = true   # "real and ACTIVE": approving also needs a dated record newer than recent_days
+# as_of = "2026-11-22"         # pin "today" (tests and replays); default is the real date
 
 [identity]
 min_confidence = 0.7           # Identify confidence below this = not resolved
@@ -35,6 +43,7 @@ name_only_min_similarity = 0.85  # with no website, a name match below this is n
 [age]
 young_domain_days = 180        # domain younger than this is a weak signal
 age_mismatch_years = 3         # claimed founding year older than domain by this = strong signal
+young_company_years = 1        # CIN shows incorporation this recently (years) = weak signal
 
 [operating]
 min_headcount = 3              # fewer visible employees than this = weak signal
@@ -102,4 +111,4 @@ strong_signals_for_front = 2   # this many independent strong signals = FRONT_SU
 # Fields included in the result. Add/remove here when the output format changes.
 fields = ["job_id", "request", "verdict", "recommended_action", "approval",
           "who_runs_it", "how_long_it_has_existed", "is_trading", "looks_off",
-          "cannot_verify", "registry", "facts", "cost"]
+          "cannot_verify", "registry", "latest_activity", "facts", "cost"]

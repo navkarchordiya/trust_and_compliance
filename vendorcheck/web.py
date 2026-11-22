@@ -136,7 +136,7 @@ def make_handler(db_path: str, cfg: dict):
             try:
                 if parts == ["check"]:
                     f = self.form()
-                    request = {k: f[k] for k in ("name", "website", "gstin", "text") if f.get(k)}
+                    request = {k: f[k] for k in ("name", "website", "gstin", "cin", "directors", "text") if f.get(k)}
                     if not request:
                         return self.redirect("/")
                     job_id = new_job(store, request)
@@ -182,6 +182,8 @@ def make_handler(db_path: str, cfg: dict):
                     "<input name='name' placeholder='Vendor name' size='28'>"
                     "<input name='website' placeholder='Website, e.g. acmefreight.in' size='26'>"
                     "<input name='gstin' placeholder='GSTIN (optional)' size='18'>"
+                    "<input name='cin' placeholder='CIN (optional)' size='22'>"
+                    "<input name='directors' placeholder='Directors, separated by ; (optional)' size='30'>"
                     "<button>Check vendor</button></form>"
                     "<p class='muted'>The check gathers facts from Crustdata, the domain registry and the GST "
                     "registry, decides with fixed rules, and waits for a person before anything irreversible."

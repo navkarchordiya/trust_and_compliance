@@ -69,10 +69,11 @@
   "expected": "REAL_AND_TRADING"
  },
  {
-  "case": "two records share one website",
+  "case": "brand bought by a rival (Ecom Express -> Delhivery, Jul 2025)",
   "name": "Ecom Express Private Limited",
   "website": "ecomexpress.in",
-  "expected": "REAL_AND_TRADING"
+  "expected": "!REAL_AND_TRADING",
+  "why": "Delhivery completed buying 99.87% of Ecom Express in July 2025 (NSE filing, 23 Jul 2025). Live: ecomexpress.in is registered to Delhivery Limited, its certificate has expired and its newest job posting is from July 2024. Not an independent, active vendor: a person must confirm the entity to pay."
  },
  {
   "case": "honest carrier, CXOs only",

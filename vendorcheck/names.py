@@ -207,3 +207,65 @@ def claims_company(name: str | None) -> bool:
     """True when the name itself says it is a company (Pvt Ltd, Limited, ...)."""
     words = set(re.sub(r"[^a-z ]+", " ", (name or "").lower()).split())
     return bool(words & {"pvt", "private", "limited", "ltd"})
+
+
+# ---------------------------------------------------------------------------- company registration (CIN)
+# Corporate Identity Number issued by the Registrar of Companies (MCA), e.g. L62200TG2008PLC061781:
+#   L/U listed or unlisted | 5-digit industry (NIC) code | 2-letter state | year of incorporation |
+#   3-letter company type | 6-digit registration number.
+CIN_RE = re.compile(r"\b([LU])(\d{5})([A-Z]{2})(\d{4})([A-Z]{3})(\d{6})\b")
+CIN_STATES = {"AN": "Andaman and Nicobar", "AP": "Andhra Pradesh", "AR": "Arunachal Pradesh", "AS": "Assam",
+              "BR": "Bihar", "CH": "Chandigarh", "CT": "Chhattisgarh", "DL": "Delhi", "GA": "Goa",
+              "GJ": "Gujarat", "HP": "Himachal Pradesh", "HR": "Haryana", "JH": "Jharkhand",
+              "JK": "Jammu and Kashmir", "KA": "Karnataka", "KL": "Kerala", "MH": "Maharashtra",
+              "ML": "Meghalaya", "MN": "Manipur", "MP": "Madhya Pradesh", "MZ": "Mizoram", "NL": "Nagaland",
+              "OR": "Odisha", "PB": "Punjab", "PY": "Puducherry", "RJ": "Rajasthan", "SK": "Sikkim",
+              "TG": "Telangana", "TN": "Tamil Nadu", "TR": "Tripura", "UP": "Uttar Pradesh",
+              "UR": "Uttarakhand", "UT": "Uttarakhand", "WB": "West Bengal", "DN": "Dadra and Nagar Haveli",
+              "DD": "Daman and Diu", "LD": "Lakshadweep"}
+CIN_TYPES = {"PLC": "public limited company", "PTC": "private limited company", "OPC": "one person company",
+             "GOI": "central government company", "SGC": "state government company",
+             "NPL": "not-for-profit (section 8) company", "FLC": "public company (financial lease)",
+             "FTC": "private company (subsidiary of a foreign company)", "GAP": "public company limited by guarantee",
+             "GAT": "private company limited by guarantee", "ULL": "public unlimited company",
+             "ULT": "private unlimited company"}
+
+
+def find_cins(text: str) -> list[str]:
+    return list(dict.fromkeys(m.group(0) for m in CIN_RE.finditer((text or "").upper())))
+
+
+def decode_cin(cin: str | None) -> dict | None:
+    """What a CIN itself states. The format is fixed by the MCA, so these are facts of the identifier,
+    not guesses: listed or not, state of registration, year of incorporation, type of company.
+    Returns None when the value is not a well-formed CIN."""
+    m = CIN_RE.fullmatch((cin or "").strip().upper())
+    if not m:
+        return None
+    listed, nic, state, year, kind, number = m.groups()
+    if state not in CIN_STATES or kind not in CIN_TYPES or not 1850 <= int(year) <= 2100:
+        return None
+    return {"cin": m.group(0), "listed": listed == "L", "industry_code": nic, "state": CIN_STATES[state],
+            "year_incorporated": int(year), "company_type": CIN_TYPES[kind], "type_code": kind}
+
+
+def parse_people_list(value) -> list[str]:
+    """Director names given with a request: a list, or one string separated by ';', ',', '|' or newlines."""
+    if not value:
+        return []
+    items = value if isinstance(value, list) else re.split(r"[;,|\n]", str(value))
+    cleaned = []
+    for item in items:
+        name = re.sub(r"^(mr|mrs|ms|dr|shri|smt)\.?\s+", "", str(item).strip(), flags=re.I).strip(" .")
+        if len(name) >= 3 and name.lower() not in (c.lower() for c in cleaned):
+            cleaned.append(name)
+    return cleaned[:8]
+
+
+def same_person(a: str | None, b: str | None) -> bool:
+    """Two spellings of one person's name: same tokens ignoring case, titles, dots and order."""
+    def tokens(n):
+        n = re.sub(r"^(mr|mrs|ms|dr|shri|smt)\.?\s+", "", (n or "").strip(), flags=re.I)
+        return {t for t in re.split(r"[^a-z]+", n.lower()) if len(t) > 1}
+    ta, tb = tokens(a), tokens(b)
+    return bool(ta) and bool(tb) and (ta == tb or (len(ta) >= 2 and len(tb) >= 2 and (ta <= tb or tb <= ta)))

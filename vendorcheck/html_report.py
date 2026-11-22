@@ -148,7 +148,8 @@ def render_job(result: dict, live_links: bool = False, message: str = "", csrf: 
     rows = "".join(
         f"<tr><td>{escape(p.get('name') or '')}</td><td>{escape(p.get('current_title') or p.get('title') or '')}</td>"
         f"<td>{escape(p.get('since') or '')}</td>"
-        f"<td>{ {True: 'confirmed on own profile', False: 'NOT confirmed', None: 'cannot verify'}[p.get('confirmed')] }"
+        f"<td>{'named by the vendor; ' if p.get('declared') else ''}"
+        f"{ {True: 'confirmed on own profile', False: 'NOT confirmed', None: 'cannot verify'}[p.get('confirmed')] }"
         f"{(' — ' + escape(p['why'])) if p.get('why') else ''}</td></tr>"
         for p in r.get("who_runs_it") or [])
     age = r.get("how_long_it_has_existed") or {}
@@ -159,7 +160,13 @@ def render_job(result: dict, live_links: bool = False, message: str = "", csrf: 
         + "</div><div class='card'><h2>How long it has existed</h2><ul>"
         f"<li>Founded: {escape(str(age.get('year_founded') or '?'))}</li>"
         f"<li>Website registered: {escape(str(age.get('domain_registered') or '?')[:10])}</li>"
-        f"<li>Earliest founder start: {escape(str(age.get('earliest_founder_start') or '?'))}</li></ul>"
+        f"<li>Earliest founder start: {escape(str(age.get('earliest_founder_start') or '?'))}</li>"
+        + (f"<li>Incorporated: {escape(str(age['year_incorporated']))} (CIN {escape(age.get('cin') or '')})</li>"
+           if age.get("year_incorporated") else "")
+        + (f"<li>Newest dated activity: {escape(r['latest_activity']['date'])}, "
+           f"{escape(r['latest_activity']['what'])} ({r['latest_activity']['days_before_check']} days before the check)</li>"
+           if r.get("latest_activity") else "<li>Newest dated activity: none on record</li>")
+        + "</ul>"
         + ("<h2>GST registration</h2>" + bullet_list(
             [f"{g['gstin']}: checksum {'ok' if g.get('checksum_ok') else 'FAILED'}, registry {g.get('registry')}"
              + (f", {g.get('status')}, {g.get('legal_name')}" if g.get('registry') == 'FOUND' else '')

@@ -45,6 +45,9 @@ def main(argv=None):
     r.add_argument("--website")
     r.add_argument("--text")
     r.add_argument("--gstin", help="GSTIN from the vendor's onboarding form (optional)")
+    r.add_argument("--cin", help="company registration number (CIN) from the vendor's form (optional)")
+    r.add_argument("--director", action="append", default=[],
+                   help="a director named by the vendor; repeat for each (optional, screened in the news)")
     r.add_argument("--json", action="store_true")
     sub.add_parser("resume")
     s = sub.add_parser("show")
@@ -102,7 +105,8 @@ def main(argv=None):
             ap.error("give --name/--website or --text")
         job_id = new_job(store, {k: v for k, v in
                                  {"name": args.name, "website": args.website, "text": args.text,
-                                  "gstin": args.gstin}.items() if v})
+                                  "gstin": args.gstin, "cin": args.cin,
+                                  "directors": args.director}.items() if v})
         print(f"started {job_id}", file=sys.stderr)
         pipe.run(job_id)
         show(job_id, args.json)

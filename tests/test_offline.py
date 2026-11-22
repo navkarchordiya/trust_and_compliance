@@ -101,6 +101,7 @@ class Base(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.store = Store(Path(self.tmp.name) / "t.db")
         self.cfg = load_config()
+        self.cfg["activity"]["as_of"] = "2026-11-22"      # fixed "today", so dated fixtures never go stale
 
     def tearDown(self):
         self.store.db.close()

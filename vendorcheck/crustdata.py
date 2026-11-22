@@ -37,6 +37,14 @@ class Crustdata:
             "fields": self.cfg["crustdata"]["enrich_fields"],
         }, not_found=_no_matches)
 
+    # 0.03 credits per listing returned; nothing when there are none
+    def job_search(self, company_id: int, limit: int = 3) -> Result:
+        return self._post("/job/search", {
+            "filters": {"field": "company.basic_info.crustdata_company_id", "type": "=", "value": company_id},
+            "sorts": [{"field": "metadata.date_added", "order": "desc"}],
+            "limit": limit,
+        }, not_found=lambda d: isinstance(d, dict) and not d.get("job_listings"))
+
     # 1+ credits per record
     def enrich_person(self, profile_url: str) -> Result:
         return self._post("/person/enrich", {

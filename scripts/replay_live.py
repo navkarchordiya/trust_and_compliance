@@ -21,12 +21,14 @@ from vendorcheck.pipeline import Pipeline                              # noqa: E
 from vendorcheck.store import Store                                    # noqa: E402
 
 RECORDINGS = ROOT / "tests" / "fixtures" / "live_2026-11-22"
+MISSING: list = []                                                     # requests with no recording (debugging)
 
 
 def replay_transport(method, url, headers, body, timeout):
     key = hashlib.sha256(f"{method} {url} {body or b''!r}".encode()).hexdigest()[:16]
     path = RECORDINGS / f"{key}.json"
     if not path.exists():
+        MISSING.append((url, body))
         raise TimeoutError("no recorded answer for this request")
     record = json.loads(path.read_text())
     return record.get("http_status", 200), {"x-credits-used": str(record.get("credits", 0))}, record["text"]
@@ -35,6 +37,7 @@ def replay_transport(method, url, headers, body, timeout):
 def replay(cases: str = str(ROOT / "tests" / "cases.json"), quiet: bool = False):
     cfg = config_module.load_config()
     cfg["limits"]["max_retries"] = 0
+    cfg.setdefault("activity", {})["as_of"] = "2026-11-22"             # the day the answers were recorded
     work = Path(tempfile.mkdtemp())
     config_module.ROOT = work                                           # results and logs go to a temp folder
     store = Store(work / "replay.db")

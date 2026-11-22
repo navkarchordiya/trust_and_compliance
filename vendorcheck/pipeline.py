@@ -13,11 +13,11 @@ from datetime import datetime, timezone
 
 from . import names
 from .crustdata import Crustdata, rdap_domain
-from .evidence import Evidence, html_to_text, snippet_around
+from .evidence import Evidence, get_path, html_to_text, snippet_around
 from .sources import FOUND, NOT_FOUND, SourceClient, urllib_transport
 from .store import Store, now_iso
 
-STAGES = ["take_request", "plan", "identify", "enrich", "domain_age", "registry", "leaders", "media",
+STAGES = ["take_request", "plan", "identify", "enrich", "activity", "domain_age", "registry", "leaders", "media",
           "decide", "hand_over", "done"]
 GATHER_STAGES = STAGES[: STAGES.index("decide")]
 # A re-screen of an approved vendor reuses these from the original check (who the company is, its
@@ -165,8 +165,20 @@ class Pipeline:
         if not r.get("name"):
             notes.append("No vendor name given: cannot compare the claimed name with the record.")
         gstin = (r.get("gstin") or "").strip().upper() or None
+        cin = (r.get("cin") or "").strip().upper() or None
+        if not cin and r.get("text"):
+            found = names.find_cins(r["text"])
+            cin = found[0] if found else None
         out = {"name": r.get("name"), "domain": domain, "gstin": gstin, "notes": notes,
                "name_from_text": name_from_text}
+        # Optional extras: only added when given, so a request without them is handled exactly as before.
+        if cin:
+            out["cin"] = cin
+            if not names.decode_cin(cin):
+                notes.append(f"'{cin}' is not a well-formed CIN (company registration number).")
+        directors = names.parse_people_list(r.get("directors"))
+        if directors:
+            out["directors"] = directors
         if r.get("website") and not domain:
             notes.append(f"'{r['website']}' is not a usable website; treated as no website.")
         if r.get("rescreen_of"):
@@ -188,6 +200,7 @@ class Pipeline:
         steps = [
             ("identify company", est["/company/identify"]),
             ("enrich company (founders, headcount, news)", est["/company/enrich"]),
+            ("latest dated job postings (is it active now)", est.get("/job/search", 0)),
             ("domain registration date (RDAP)", est["rdap"]),
             (f"read GSTIN from up to {self.cfg.get('registry', {}).get('max_pages', 1)} website page(s)",
              self.cfg.get("registry", {}).get("max_pages", 1) * est["/web/enrich/live"]),
@@ -453,6 +466,46 @@ class Pipeline:
                           f"{b}.news[0].article_title", record_date=out["news"][0]["date"])
         return out
 
+    # ------------------------------------------------------------------ 3. gather: is it active now
+    def s_activity(self) -> dict:
+        """Dated proof that the firm is active NOW: its most recent job postings (Crustdata Job Search,
+        0.03 credits per listing). A headcount or an "active" flag can be years old; a job posted last week
+        cannot."""
+        acfg = self.cfg.get("activity", {})
+        if not acfg.get("enabled", True):
+            return {"status": "SKIPPED", "reason": "activity check turned off in config"}
+        ident = self.out("identify") or {}
+        if ident.get("status") != "RESOLVED" or not (ident.get("top") or {}).get("id"):
+            return {"status": "SKIPPED", "reason": "company not identified"}
+        res = self.cd.job_search(ident["top"]["id"], acfg.get("max_listings", 3))
+        if res.status == NOT_FOUND:
+            return {"status": "NOT_FOUND", "postings": [], "total": 0}
+        if res.status != FOUND or not isinstance(res.data, dict):
+            return {"status": res.status, "error": res.error,
+                    "missing": f"Job Search (dated hiring activity) returned {res.status}"}
+        postings = []
+        for i, job in enumerate((res.data.get("job_listings") or [])[: acfg.get("max_listings", 3)]):
+            if not isinstance(job, dict):
+                continue
+            # The API nests fields (job_details.title, metadata.date_added); the connector flattens them.
+            nested = isinstance(job.get("job_details"), dict)
+            title_path = f"job_listings[{i}]." + ("job_details.title" if nested else "title")
+            date_path = f"job_listings[{i}]." + ("metadata.date_added" if nested else "date_added")
+            url = (job.get("job_details") or {}).get("url") if nested else job.get("url")
+            try:
+                date = get_path(res.data, date_path)
+            except (KeyError, IndexError, TypeError):
+                date = None
+            if not date:
+                continue
+            title = self.ev.field("activity", f"Job posted by the company on {str(date)[:10]}", res, title_path,
+                                  record_date=date)
+            postings.append({"title": title, "date": str(date)[:10], "url": url})
+        postings.sort(key=lambda p: p["date"], reverse=True)
+        total = res.data.get("total_count")
+        return {"status": "FOUND" if postings else "NOT_FOUND", "postings": postings,
+                "total": total if isinstance(total, int) else len(postings)}
+
     # ------------------------------------------------------------------ 3. gather: domain age
     def s_domain_age(self) -> dict:
         ident = self.out("identify") or {}
@@ -470,8 +523,21 @@ class Pipeline:
                 date = self.ev.field("domain_age", f"Domain {domain} registration date", res,
                                      f"events[{i}].eventDate", record_date=e.get("eventDate"))
                 d = datetime.fromisoformat(date.replace("Z", "+00:00"))
-                return {"status": "FOUND", "domain": domain, "registered": date,
-                        "age_days": (datetime.now(timezone.utc) - d).days}
+                out = {"status": "FOUND", "domain": domain, "registered": date,
+                       "age_days": (datetime.now(timezone.utc) - d).days}
+                # Who the domain is registered to, when the registry shows it (.in records often name the
+                # registrant organisation; .com records are usually redacted). Seen live: ecomexpress.in is
+                # registered to "Delhivery Limited", which bought Ecom Express.
+                for j, ent in enumerate(res.data.get("entities") or []):
+                    if not isinstance(ent, dict) or "registrant" not in (ent.get("roles") or []):
+                        continue
+                    card = (ent.get("vcardArray") or [None, []])[1] or []
+                    for k, item in enumerate(card):
+                        if isinstance(item, list) and len(item) >= 4 and item[0] == "org" and str(item[3]).strip():
+                            out["registrant_org"] = self.ev.field(
+                                "domain_age", f"Organisation the domain {domain} is registered to", res,
+                                f"entities[{j}].vcardArray[1][{k}][3]")
+                return out
         return {"status": "NOT_FOUND", "missing": f"RDAP record for {domain} has no registration date"}
 
     # ------------------------------------------------------------------ 3. gather: registry (GST)
@@ -483,19 +549,26 @@ class Pipeline:
         domain = req.get("domain") or ((ident.get("top") or {}).get("domain")
                                        if ident.get("status") == "RESOLVED" else None)
         pages, gstins, origin = [], [], {}
+        cins, cin_origin = ([req["cin"]], {req["cin"]: "request"}) if req.get("cin") else ([], {})
         if req.get("gstin"):
             gstins.append(req["gstin"])          # given on the vendor's onboarding form (a claim, like the website)
             origin[req["gstin"]] = "request"
+        def with_cins(out: dict) -> dict:
+            if cins:
+                out["cins"] = [{"cin": c, "from": cin_origin.get(c, "website"), "decoded": names.decode_cin(c)}
+                               for c in cins]
+            return out
+
         if not domain and not gstins:
-            return {"status": "SKIPPED", "reason": "no website or GSTIN given"}
+            return with_cins({"status": "SKIPPED", "reason": "no website or GSTIN given"})
 
         # If the run's budget is tight (e.g. a lowered cost limit), keep credits for the news search,
         # which matters more than reading a GSTIN off the homepage.
         reserve = self.cfg["limits"].get("reserve_credits_for_news", 1)
         remaining = self.cfg["limits"]["max_credits_per_run"] - self.store.credits_spent(self.job_id)
         if not gstins and domain and remaining - self.cfg["credit_estimates"]["/web/enrich/live"] < reserve:
-            return {"status": "SKIPPED_BUDGET", "gstins": [],
-                    "missing": "the homepage was not read, to keep the run's credit budget for the news check"}
+            return with_cins({"status": "SKIPPED_BUDGET", "gstins": [],
+                              "missing": "the homepage was not read, to keep the run's credit budget for the news check"})
         hosts = [domain]
         if rcfg.get("try_www_first", True) and domain and domain.count(".") == 1:
             hosts = [f"www.{domain}", domain]           # a bare-domain fallback only if www fails
@@ -512,6 +585,12 @@ class Pipeline:
             if pages[-1]["status"] != FOUND:
                 continue
             text = html_to_text(entry.get("content") or "")
+            for cin in names.find_cins(text)[:2]:
+                if cin not in cins:
+                    cins.append(cin)
+                    cin_origin[cin] = "website"
+                    self.ev.passage("registry", "Company registration number (CIN) shown on the vendor's own website",
+                                    cin, page, text, snippet_around(text, cin, 80), url)
             for gstin in names.find_gstins(text):
                 if gstin in gstins:
                     continue
@@ -523,8 +602,8 @@ class Pipeline:
                 break
         if not gstins and not any(p["status"] == FOUND for p in pages):
             why = "; ".join(f"{p['url']}: {p['error'] or p['status']}" for p in pages)
-            return {"status": "UNAVAILABLE", "pages": pages, "gstins": [],
-                    "missing": f"the vendor's website could not be read ({why})"}
+            return with_cins({"status": "UNAVAILABLE", "pages": pages, "gstins": [],
+                              "missing": f"the vendor's website could not be read ({why})"})
 
         checked = []
         for gstin in gstins[:2]:
@@ -557,7 +636,7 @@ class Pipeline:
                                    "constitution_of_business"),
                 )
             checked.append(item)
-        return {"status": "DONE", "pages": pages, "gstins": checked}
+        return with_cins({"status": "DONE", "pages": pages, "gstins": checked})
 
     # ------------------------------------------------------------------ 3. gather: who runs it
     def s_leaders(self) -> dict:
@@ -589,6 +668,20 @@ class Pipeline:
             else:
                 checked.append({**p, "confirmed": False,
                                 "current_employers": [j[1].get("employer_name") or j[1].get("name") for j in jobs]})
+        # Directors named on the vendor's onboarding form are screened in the news too. They are a claim:
+        # a director also found among the company record's leaders is marked so; the others are not
+        # confirmed by any source here (the MCA register of directors is not read).
+        on_record = enr.get("people") or []
+        for declared in self.out("take_request").get("directors") or []:
+            match = next((l for l in checked if names.same_person(l["name"], declared)), None)
+            if match:
+                match["declared"] = True
+                continue
+            record = next((p for p in on_record if names.same_person(p.get("name"), declared)), None)
+            checked.append({"name": declared, "group": "declared", "declared": True, "confirmed": None,
+                            "on_record_as": (record or {}).get("current_title") or (record or {}).get("title"),
+                            "why": "named on the vendor's form; not on the company record" if not record else
+                                   "named on the vendor's form; also listed on the company record"})
         return {"leaders": checked}
 
     # ------------------------------------------------------------------ 3. gather: adverse media (5.2)
