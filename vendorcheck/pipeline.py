@@ -22,6 +22,17 @@ STAGES = ["take_request", "plan", "identify", "enrich", "domain_age", "registry"
 GATHER_STAGES = STAGES[: STAGES.index("decide")]
 
 
+def request_keys(req: dict) -> list[str]:
+    """Keys that identify the vendor from the request alone: website, GSTIN, and the core name.
+    Used for duplicates against the client's vendor list and other open jobs."""
+    keys = [req.get("domain")]
+    if req.get("gstin"):
+        keys.append(f"gstin:{req['gstin']}")
+    if names.core_name(req.get("name")):
+        keys.append(f"name:{names.core_name(req.get('name'))}")
+    return [k for k in keys if k]
+
+
 def new_job(store: Store, request: dict, job_id: str | None = None) -> str:
     """Create a job. A caller-chosen job_id (used by batch runs) makes re-submitting the same
     request after a crash resume the existing job instead of creating a duplicate."""
@@ -91,6 +102,8 @@ class Pipeline:
     # ------------------------------------------------------------------ driver
     def run(self, job_id: str) -> dict:
         job = self.store.job(job_id)
+        self.store.log_event(job_id, "run_start" if job["stage"] == STAGES[0] else "resume",
+                             stage=job["stage"])
         client = SourceClient(self.store, job_id, self.cfg, self.transport, self.sleep)
         self.cd = Crustdata(client, self.cfg)
         self.client = client
@@ -103,8 +116,12 @@ class Pipeline:
             if stage == "done":
                 break
             self.log(f"[{job_id}] stage: {stage}")
+            self.store.log_event(job_id, "stage_start", stage=stage)
+            t0 = time.time()
             self.store.clear_facts(job_id, stage)       # a re-run stage rebuilds its own facts
             out = getattr(self, "s_" + stage)()
+            self.store.log_event(job_id, "stage_done", stage=stage, seconds=round(time.time() - t0, 2),
+                                 status=out.get("status"), stopped_early=bool(out.get("_stop")))
             nxt = STAGES[STAGES.index(stage) + 1]
             if out.get("_stop"):                          # e.g. nothing to look up
                 nxt = "decide" if STAGES.index(stage) < STAGES.index("decide") else nxt
@@ -165,7 +182,7 @@ class Pipeline:
             # Even with no company record, the same website asked twice is still a duplicate.
             return self._with_duplicates({"status": res.status, "by": by, "error": res.error,
                                           "missing": f"Company Identify by {by} returned {res.status}"},
-                                         [req["domain"]] if req["domain"] else [])
+                                         request_keys(req))
 
         matches = res.data[0]["matches"]
         cands = []
@@ -234,10 +251,10 @@ class Pipeline:
         out = {"status": status, "by": by, "top": top, "candidates": candidates_shown,
                "exact_domain": exact_domain, "name_similarity": sim, "similar_records": similar_records}
         if status in ("RESOLVED", "AMBIGUOUS"):
-            keys = [f"cd:{top['id']}", req["domain"] or top["domain"]]
+            keys = [f"cd:{top['id']}", req["domain"] or top["domain"]] + request_keys(req)
         else:
-            keys = [req["domain"]] if req["domain"] else []    # only the vendor's own website identifies it
-        return self._with_duplicates(out, keys)
+            keys = request_keys(req)      # only what the request itself says identifies this vendor
+        return self._with_duplicates(out, list(dict.fromkeys(keys)))
 
     def _with_duplicates(self, out: dict, keys: list[str]) -> dict:
         """Duplicate check on the normalised domain and the Crustdata company ID: against the vendor
@@ -246,7 +263,7 @@ class Pipeline:
         dup_reg = self.store.register_lookup(keys)
         dup_job = self.store.earlier_job_for(self.job_id, keys)
         out.update(company_keys=keys,
-                   duplicate_of=dict(dup_reg) if dup_reg else None,
+                   duplicate_of=dup_reg,
                    earlier_job={"id": dup_job["id"], "verdict": dup_job["verdict"]} if dup_job else None)
         if dup_reg or dup_job:
             out["_stop"] = True     # a duplicate is held for a person; no need to pay for the rest

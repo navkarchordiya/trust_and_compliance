@@ -59,7 +59,12 @@ def decide(cfg: dict, o: dict) -> dict:
                     + ", ".join(ident["similar_records"][:3]) + ". Confirm the vendor's website.")
     if ident.get("duplicate_of"):
         d = ident["duplicate_of"]
-        weak.append(f"Duplicate: this company was already {d['decision']} in job {d['job_id']}.")
+        if d.get("job_id") == "client-register":
+            weak.append(f"Duplicate: already on the client's vendor list as '{d.get('name')}' "
+                        f"({d.get('domain') or 'no website'}), matched on {d.get('matched_on')}.")
+        else:
+            weak.append(f"Duplicate: this company was already {d['decision']} in job {d['job_id']} "
+                        f"(matched on {d.get('matched_on')}).")
         review.append("Possible duplicate of an existing vendor; the rest of the check was not repeated.")
     elif ident.get("earlier_job"):
         weak.append(f"Duplicate request: the same company is already being checked in job "

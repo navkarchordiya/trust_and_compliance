@@ -125,3 +125,29 @@ def render_text(r: dict) -> str:
         f"(≈ ₹{c.get('inr')} at ₹{c.get('inr_per_credit_assumed')}/credit), "
         f"{c.get('calls')} calls, {c.get('elapsed_s')}s  {c.get('by_endpoint')}")
     return "\n".join(L)
+
+
+def cost_summary(store: Store, cfg: dict) -> str:
+    """Measured cost per job across every run in this database: what the finance judge asks for."""
+    rate = cfg.get("cost", {}).get("inr_per_credit", 0)
+    rows = store.db.execute(
+        "SELECT j.id, j.verdict, j.started_at, j.updated_at, COALESCE(SUM(c.credits), 0) AS credits, "
+        "COUNT(c.id) AS calls FROM jobs j LEFT JOIN calls c ON c.job_id = j.id "
+        "WHERE j.stage = 'done' GROUP BY j.id").fetchall()
+    if not rows:
+        return "no finished jobs yet"
+    credits = sorted(r["credits"] for r in rows)
+    seconds = sorted(r["updated_at"] - r["started_at"] for r in rows)
+    mean = sum(credits) / len(credits)
+    p90 = credits[min(len(credits) - 1, int(0.9 * len(credits)))]
+    lines = [f"{len(rows)} finished jobs",
+             f"credits per job: mean {mean:.2f}, p90 {p90:.2f}, max {credits[-1]:.2f}",
+             f"rupees per job (at Rs {rate}/credit): mean Rs {mean * rate:.2f}, p90 Rs {p90 * rate:.2f}",
+             f"seconds per job: median {seconds[len(seconds) // 2]:.1f}, max {seconds[-1]:.1f}",
+             "by verdict:"]
+    by_verdict: dict[str, list] = {}
+    for r in rows:
+        by_verdict.setdefault(r["verdict"] or "-", []).append(r["credits"])
+    for verdict, values in sorted(by_verdict.items()):
+        lines.append(f"  {verdict:<17} {len(values):>3} jobs, mean {sum(values) / len(values):.2f} credits")
+    return "\n".join(lines)

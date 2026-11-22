@@ -89,3 +89,21 @@ def print_eval(results: list[tuple[dict, dict]]) -> int:
     print(f"\n{counts['PASS']}/{total} pass, {counts['SAFE_MISS']} safe misses (cannot verify / hold), "
           f"{counts['FAIL']} wrong answers")
     return 1 if counts["FAIL"] else 0
+
+
+def import_vendors(store: Store, path: str) -> str:
+    """Load the client's existing vendor list so a request for a vendor it already has is caught as a
+    duplicate. Each vendor is keyed by website, GSTIN and core name (columns: name, website, gstin)."""
+    from . import names
+    count = 0
+    for row in load_rows(path):
+        name = row.get("name") or row.get("vendor_name") or row.get("legal_name")
+        domain = names.domain_of(row.get("website") or row.get("domain"))
+        gstin = (row.get("gstin") or row.get("GSTIN") or "").strip().upper() or None
+        keys = [domain, f"gstin:{gstin}" if gstin else None,
+                f"name:{names.core_name(name)}" if names.core_name(name) else None]
+        for key in [k for k in keys if k]:
+            store.add_register_entry(key, name, domain, row.get("status") or "on the client's vendor list",
+                                     "client-register")
+        count += 1
+    return f"imported {count} vendors from {path}"

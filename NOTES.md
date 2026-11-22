@@ -77,6 +77,11 @@ What we tried, what works, and what comes next. (The guide: "They are the heart 
     from when the current process picked the job up.
   - Identify is free (docs.crustdata.com/general/pricing); `X-Credits-Used` confirmed as the header.
 
+- 12:45 Merged with Vedant's live fixes (kept his name grouping, adverse vs front split, block-page detection).
+  Added: client vendor-list import (duplicates by website / GSTIN / name, even with sources down),
+  JSON-lines event log per job, written reason required to overrule the recommendation, retention purge,
+  `costs` (measured mean / p90 per job), `scripts/kill_demo.sh` for the kill-on-stage demo. 37 tests.
+
 ## Declared before 10:15
 
 TODO before submitting: list anything written before 10:15 (code, prompts, notes), or write "Nothing".

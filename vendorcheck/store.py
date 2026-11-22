@@ -98,6 +98,7 @@ class Store:
     def __init__(self, path: Path | str | None = None):
         path = Path(path) if path else ROOT / "data" / "vendorcheck.db"
         path.parent.mkdir(parents=True, exist_ok=True)
+        self.log_dir = path.parent / "logs"              # one JSON-lines event log per job
         self.db = sqlite3.connect(str(path), isolation_level=None)  # autocommit; explicit BEGIN for transactions
         self.db.row_factory = sqlite3.Row
         self.db.execute("PRAGMA journal_mode=WAL")
@@ -110,6 +111,7 @@ class Store:
         wanted = {
             "calls": {"credits_source": "TEXT"},       # reported (X-Credits-Used header) | estimated | none
             "facts": {"record_date": "TEXT"},          # the date the source gives for the record itself
+            "approvals": {"override_reason": "TEXT"},  # why a person chose a different action than recommended
         }
         for table, columns in wanted.items():
             have = {row["name"] for row in self.db.execute(f"PRAGMA table_info({table})")}
@@ -197,14 +199,40 @@ class Store:
         return self.db.execute("SELECT * FROM facts WHERE job_id=? ORDER BY id", (job_id,)).fetchall()
 
     # ---- vendor register (duplicates) ----
-    def register_lookup(self, keys: list[str]) -> sqlite3.Row | None:
+    def register_lookup(self, keys: list[str]) -> dict | None:
+        """First vendor-register entry matching any key (Crustdata ID, domain, gstin:..., name:...)."""
         for k in keys:
             if not k:
                 continue
             row = self.db.execute("SELECT * FROM vendor_register WHERE company_key=?", (k,)).fetchone()
             if row:
-                return row
+                return {**dict(row), "matched_on": k}
         return None
+
+    def add_register_entry(self, key: str, name: str | None, domain: str | None, decision: str,
+                           job_id: str) -> None:
+        self.db.execute("INSERT OR REPLACE INTO vendor_register (company_key, name, domain, decision, job_id, "
+                        "decided_at) VALUES (?,?,?,?,?,?)", (key, name, domain, decision, job_id, now_iso()))
+
+    # ---- event log (for screening: what happened, when, in which order) ----
+    def log_event(self, job_id: str, event: str, **fields) -> None:
+        try:
+            self.log_dir.mkdir(parents=True, exist_ok=True)
+            with open(self.log_dir / f"{job_id}.jsonl", "a", encoding="utf-8") as f:
+                f.write(json.dumps({"at": now_iso(), "job": job_id, "event": event, **fields},
+                                   ensure_ascii=False, default=str) + "\n")
+        except OSError:
+            pass        # logging must never break a run
+
+    # ---- privacy: retention ----
+    def purge_raw_responses(self, older_than_days: float) -> int:
+        """Delete stored raw responses (which can hold people's profiles) for CLOSED jobs older than
+        the retention period. Facts keep the exact quote, source and dates, so the evidence file stays."""
+        cutoff = time.time() - older_than_days * 86400
+        cur = self.db.execute(
+            "UPDATE calls SET response_text=NULL WHERE response_text IS NOT NULL AND job_id IN "
+            "(SELECT id FROM jobs WHERE status='closed' AND updated_at < ?)", (cutoff,))
+        return cur.rowcount
 
     def earlier_job_for(self, job_id: str, keys: list[str]) -> sqlite3.Row | None:
         """Another OPEN job (running or waiting for approval) that resolved to the same company.

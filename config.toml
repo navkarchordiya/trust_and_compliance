@@ -69,6 +69,9 @@ min_legal_name_similarity = 0.6
 inr_per_credit = 8.0
 gst_inr_per_call = 1.0         # ASSUMPTION: per-call price of the GST verification API
 
+[privacy]
+retention_days = 30            # `purge` deletes raw responses (people's profiles) of closed jobs after this
+
 [verdict]
 strong_signals_for_front = 2   # this many independent strong signals = FRONT_SUSPECTED
 

@@ -12,6 +12,10 @@
   python -m vendorcheck batch FILE        # JSON or CSV of requests; restart-safe
   python -m vendorcheck eval FILE         # batch + compare with each row's expected verdict
   python -m vendorcheck outbox            # internal notifications written so far
+  python -m vendorcheck import-vendors F  # the client's existing vendor list (CSV/JSON): duplicates
+  python -m vendorcheck costs             # measured cost per job, across all runs
+  python -m vendorcheck purge --days 30   # delete stored raw responses of closed jobs (retention)
+  python -m vendorcheck log JOB           # the run's event log
 """
 import argparse
 import json
@@ -48,9 +52,11 @@ def main(argv=None):
     a.add_argument("job")
     a.add_argument("--by", required=True)
     a.add_argument("--action")
+    a.add_argument("--reason", help="required when choosing a different action than recommended")
     d = sub.add_parser("decline")
     d.add_argument("job")
     d.add_argument("--by", required=True)
+    d.add_argument("--reason")
     l = sub.add_parser("ledger")
     l.add_argument("job")
     w = sub.add_parser("raw")
@@ -60,6 +66,13 @@ def main(argv=None):
     e = sub.add_parser("eval")
     e.add_argument("file")
     sub.add_parser("outbox")
+    iv = sub.add_parser("import-vendors")
+    iv.add_argument("file")
+    sub.add_parser("costs")
+    pg = sub.add_parser("purge")
+    pg.add_argument("--days", type=float, default=cfg.get("privacy", {}).get("retention_days", 30))
+    lg = sub.add_parser("log")
+    lg.add_argument("job")
     args = ap.parse_args(argv)
 
     store = Store(args.db)
@@ -98,9 +111,22 @@ def main(argv=None):
                                     "WHERE a.status='pending'"):
             print(f"{row['job_id']}  {row['verdict']:<17} recommend {row['recommended_action']:<24} {row['reason']}")
     elif args.cmd == "approve":
-        print(decide_approval(store, args.job, args.by, args.action))
+        print(decide_approval(store, args.job, args.by, args.action, reason=args.reason))
     elif args.cmd == "decline":
-        print(decide_approval(store, args.job, args.by, decline=True))
+        print(decide_approval(store, args.job, args.by, decline=True, reason=args.reason))
+    elif args.cmd == "import-vendors":
+        from .batch import import_vendors
+        print(import_vendors(store, args.file))
+    elif args.cmd == "costs":
+        from .report import cost_summary
+        print(cost_summary(store, cfg))
+    elif args.cmd == "purge":
+        n = store.purge_raw_responses(args.days)
+        print(f"deleted the raw responses of {n} calls from closed jobs older than {args.days:g} days "
+              "(facts, quotes and sources are kept)")
+    elif args.cmd == "log":
+        path = store.log_dir / f"{args.job}.jsonl"
+        print(path.read_text() if path.exists() else "no log for that job")
     elif args.cmd == "ledger":
         total = 0.0
         for c in store.ledger(args.job):

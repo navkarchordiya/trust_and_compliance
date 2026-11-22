@@ -82,6 +82,8 @@ class SourceClient:
 
         cached = self.store.cached_call(self.job_id, key)
         if cached and cached["status"] in (FOUND, NOT_FOUND):
+            self.store.log_event(self.job_id, "call_cached", endpoint=endpoint, status=cached["status"],
+                                 note="answered from this job's stored response; not paid again")
             return self._result(cached, url)
 
         estimate = float(self.cfg.get("credit_estimates", {}).get(endpoint, 1))
@@ -149,6 +151,9 @@ class SourceClient:
             error=error, credits=credits, credits_source=credits_source, attempts=attempts,
             latency_ms=int((time.time() - t0) * 1000),
             retrieved_at=now_iso())
+        self.store.log_event(self.job_id, "call", source=source, endpoint=endpoint, status=status,
+                             http_status=http_status, attempts=attempts, credits=credits,
+                             credits_source=credits_source, error=error[:200] if error else None)
         return self._result(self.store.call(cid), url)
 
     @staticmethod

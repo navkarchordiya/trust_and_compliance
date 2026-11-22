@@ -88,6 +88,28 @@ python -m vendorcheck decline JOB --by "Your Name"
 Agents stay in the room: notifications go to an internal `outbox` table for the team, never to
 the vendor or anyone outside.
 
+## Ethics: personal data, approvals, explanations
+
+- **A person decides every irreversible step.** Clearing *and* rejecting a vendor both wait for a named
+  approver. The service only recommends. Overruling it is allowed, but needs a written reason
+  (`--reason`), stored with the decision and the action.
+- **Namesakes are protected.** An article counts against a director only if it also names the vendor.
+  A clearance based on the vendor's name being absent is labelled *weak*, and a person confirms it. A page
+  we could not read (paywall, bot check, other language) is *cannot verify*, never a clearance or a link.
+  Adverse news about a real firm sends it to a person; it never brands the firm a front.
+- **Every decision is explained.** The result lists each reason (front signals, adverse news, items
+  needing review, weak signals, what could not be verified), and every fact links to the exact field
+  or passage, the record's date and when it was retrieved. Facts never come from model memory.
+- **Minimal personal data.** Only founders and up to 3 senior leaders are looked up, using their public
+  professional profiles, and only for their current employer and title. No protected attributes
+  (religion, caste, gender, ...) are collected or used. Raw responses are deleted after
+  `[privacy] retention_days` (`python -m vendorcheck purge`); the facts and quotes stay as the evidence
+  file.
+- **Agents stay in the room.** No email or message goes to the vendor or anyone outside. Notifications go
+  to an internal outbox for the client's team.
+- **Uncertainty is stated, not guessed.** If a source times out or has no record, the result says
+  *cannot verify* and names what is missing.
+
 ## Financial feasibility
 
 - **Buyer:** the client's procurement / vendor-onboarding team (compliance signs off). Today they pay an
@@ -98,6 +120,7 @@ the vendor or anyone outside.
   combined news search (1) + up to 4 article fetches = **4 to 8 credits**; duplicates stop after Identify.
   Rupee figures use `[cost] inr_per_credit` in `config.toml`: set it to your plan's real rate.
 - **Margin** = price − (credits × ₹/credit + GST lookup + LLM, none used today).
+- `python -m vendorcheck costs` prints the measured mean, p90 and max cost per job across every run.
 
 ## Robustness
 
@@ -107,7 +130,17 @@ python -m vendorcheck resume                         # carries on from the stage
 python -m vendorcheck ledger JOB                     # every call, status, attempts, credits
 python -m vendorcheck raw CALL_ID                    # the stored raw response behind a fact
 python -m vendorcheck outbox                         # internal notifications (exactly once)
+python -m vendorcheck log JOB                        # JSON-lines event log: stages, calls, retries, actions
+./scripts/kill_demo.sh delhivery.com "Delhivery Limited" 6   # kill -9 mid-run, resume, approve twice
 ```
+
+## Client data
+
+```bash
+python -m vendorcheck import-vendors client_vendors.csv   # columns: name, website, gstin
+```
+A request for a vendor already on the client's list is held as a duplicate, matched on website, GSTIN
+or normalised name, even when the outside sources are down.
 
 Every result is also written to `data/results/JOB.json`. For screening, use a fresh database
 (`--db data/screening.db`) so test runs from the build are not reported as duplicates.

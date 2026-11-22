@@ -55,6 +55,10 @@ flowchart TD
 | Approvals | `approvals` table, `actions.py` | Clearing and rejecting both wait for a person |
 | Exactly once | `actions` table (idempotency key) | Approval, action, register entry and notification commit together |
 | Rules and output fields | `config.toml` | Thresholds, limits and output fields change without code changes |
+| Logs | `data/logs/JOB.jsonl` (`Store.log_event`) | Every stage start/finish, call (status, attempts, credits), cached replay and action |
+| Client vendor list | `vendor_register` (`import-vendors`) | Keyed by Crustdata ID, website, `gstin:`, `name:`; duplicates are held before paying for the rest |
+| Overrides | `approvals.override_reason` | Choosing another action than recommended needs a written reason |
+| Retention | `Store.purge_raw_responses` | Raw responses of closed jobs deleted after `retention_days`; facts and quotes kept |
 
 ## Exactly once: the outbox pattern
 

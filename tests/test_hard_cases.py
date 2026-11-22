@@ -9,6 +9,7 @@ from pathlib import Path
 from unittest import mock
 
 from vendorcheck import names
+from vendorcheck.actions import decide_approval
 from vendorcheck.batch import grade, run_batch
 from vendorcheck.pipeline import Pipeline, new_job
 from vendorcheck.report import build_result
@@ -225,3 +226,49 @@ class TestRealIdentifyByName(Base):
         ident = self.store.stage_output(job, "identify")
         self.assertEqual(ident["top"]["name"], "Delhivery courier service")
         self.assertEqual(ident["top"]["id"], 1236803)          # not Delhivery (5798), the first row
+
+
+class TestClientRegisterAndEthics(Base):
+    def test_vendor_already_on_client_list_is_duplicate_even_by_name_only(self):
+        from vendorcheck.batch import import_vendors
+        path = Path(self.tmp.name) / "vendors.csv"
+        path.write_text("name,website,gstin\nAcme Freight Pvt Ltd,acmefreight.in,\n")
+        import_vendors(self.store, str(path))
+        fake = Fake(company(), timeout_on={"/company/identify"})      # even with the source down
+        job, r = self.run_job(fake, {"name": "ACME FREIGHT PRIVATE LIMITED"})
+        self.assertEqual(r["verdict"], "HOLD_FOR_REVIEW", r["looks_off"])
+        self.assertTrue(any("client's vendor list" in w for w in r["looks_off"]["weak"]))
+
+    def test_duplicate_by_gstin(self):
+        from vendorcheck.batch import import_vendors
+        path = Path(self.tmp.name) / "vendors.json"
+        path.write_text(json.dumps([{"name": "Old Name Logistics", "gstin": "27AAPFU0939F1ZV"}]))
+        import_vendors(self.store, str(path))
+        job, r = self.run_job(Fake(company()), {"name": "Acme Freight", "website": "acmefreight.in",
+                                                 "gstin": "27aapfu0939f1zv"})
+        self.assertTrue(any("gstin:27AAPFU0939F1ZV" in w for w in r["looks_off"]["weak"]), r["looks_off"])
+
+    def test_override_needs_a_reason_and_is_recorded(self):
+        job, r = self.run_job(Fake(company()))
+        refused = decide_approval(self.store, job, "tester", action="reject_vendor")
+        self.assertIn("give a reason", refused)
+        self.assertEqual(self.store.db.execute("SELECT COUNT(*) c FROM actions").fetchone()["c"], 0)
+        done = decide_approval(self.store, job, "tester", action="reject_vendor", reason="site visit failed")
+        self.assertIn("done", done)
+        row = self.store.db.execute("SELECT override_reason FROM approvals WHERE job_id=?", (job,)).fetchone()
+        self.assertEqual(row["override_reason"], "site visit failed")
+
+    def test_event_log_and_purge(self):
+        job, r = self.run_job(Fake(company()))
+        events = [json.loads(l)["event"] for l in (self.store.log_dir / f"{job}.jsonl").read_text().splitlines()]
+        self.assertIn("run_start", events)
+        self.assertIn("call", events)
+        decide_approval(self.store, job, "tester")
+        self.store.db.execute("UPDATE jobs SET updated_at=? WHERE id=?", (time.time() - 40 * 86400, job))
+        self.assertGreater(self.store.purge_raw_responses(30), 0)
+        self.assertTrue(build_result(self.store, self.cfg, job)["facts"])      # evidence survives
+
+    def test_cost_summary(self):
+        from vendorcheck.report import cost_summary
+        self.run_job(Fake(company()))
+        self.assertIn("credits per job", cost_summary(self.store, self.cfg))
