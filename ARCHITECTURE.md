@@ -8,8 +8,9 @@ flowchart TD
 
     subgraph GATHER[3. Gather the facts — each sub-stage checkpointed]
         ID[identify<br/>Crustdata Company Identify<br/>lookalike + duplicate checks] --> EN[enrich<br/>Crustdata Company Enrich]
-        EN --> AGE[domain_age<br/>RDAP]
-        AGE --> REGS[registry<br/>GSTIN from request or homepage<br/>checksum + GST registry]
+        EN --> ACTV[activity<br/>Crustdata Job Search<br/>newest dated postings]
+        ACTV --> AGE[domain_age<br/>RDAP, registrant org<br/>fallback: RDAP via Web Fetch]
+        AGE --> REGS[registry<br/>GSTIN + CIN from request or homepage<br/>checksum, CIN decode, GST registry]
         REGS --> LEAD[leaders<br/>Crustdata Person Enrich]
         LEAD --> MEDIA[media<br/>Crustdata Web Search + Fetch<br/>namesake clearing]
     end
@@ -33,6 +34,7 @@ flowchart TD
 
     ID -.-> SC
     EN -.-> SC
+    ACTV -.-> SC
     AGE -.-> SC
     REGS -.-> SC
     LEAD -.-> SC

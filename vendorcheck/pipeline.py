@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from . import names
 from .crustdata import Crustdata, rdap_domain
 from .evidence import Evidence, get_path, html_to_text, snippet_around
-from .sources import FOUND, NOT_FOUND, SourceClient, urllib_transport
+from .sources import FOUND, NOT_FOUND, Result, SourceClient, urllib_transport
 from .store import Store, now_iso
 
 STAGES = ["take_request", "plan", "identify", "enrich", "activity", "domain_age", "registry", "leaders", "media",
@@ -516,11 +516,23 @@ class Pipeline:
         if not domain:
             return {"status": "SKIPPED", "reason": "no website to date"}
         res = rdap_domain(self.client, domain)
+        via = ""
+        if res.status not in (FOUND, NOT_FOUND) and self.cfg.get("domain", {}).get("fallback_via_web_fetch", True):
+            # A source fails: the same public RDAP record, read through Crustdata Web Fetch (1 credit).
+            # Seen at the venue: rdap.org unreachable from one network while the fetch route worked.
+            res, via = self._rdap_via_web_fetch(domain) or (res, ""), " (read through Crustdata Web Fetch)"
+        if res.status == NOT_FOUND:
+            unregistered = isinstance(res.data, dict) and (res.data.get("errorCode") == 404 or "available for "
+                                                           "registration" in json.dumps(res.data.get("description")))
+            if unregistered:
+                self.ev.field("domain_age", f"Domain registry answer for {domain}{via}", res, "description[0]")
+            return {"status": NOT_FOUND, "domain": domain, "unregistered": bool(unregistered),
+                    "missing": f"Domain registry (RDAP) has no record of {domain}"}
         if res.status != FOUND or not isinstance(res.data, dict):
             return {"status": res.status, "error": res.error, "missing": f"Domain registry (RDAP) for {domain}"}
         for i, e in enumerate(res.data.get("events") or []):
             if e.get("eventAction") == "registration":
-                date = self.ev.field("domain_age", f"Domain {domain} registration date", res,
+                date = self.ev.field("domain_age", f"Domain {domain} registration date{via}", res,
                                      f"events[{i}].eventDate", record_date=e.get("eventDate"))
                 d = datetime.fromisoformat(date.replace("Z", "+00:00"))
                 out = {"status": "FOUND", "domain": domain, "registered": date,
@@ -539,6 +551,23 @@ class Pipeline:
                                 f"entities[{j}].vcardArray[1][{k}][3]")
                 return out
         return {"status": "NOT_FOUND", "missing": f"RDAP record for {domain} has no registration date"}
+
+    def _rdap_via_web_fetch(self, domain: str):
+        """The RDAP record for a domain, read through Crustdata Web Fetch. Returns a Result whose data is
+        the RDAP JSON (so facts cite RDAP fields), or None if that route failed too."""
+        url = f"https://rdap.org/domain/{domain}"
+        page = self.cd.web_fetch(url)
+        entry = (page.data or [{}])[0] if isinstance(page.data, list) and page.data else {}
+        if page.status != FOUND or not isinstance(entry, dict) or not entry.get("content"):
+            return None
+        try:
+            record = json.loads(entry["content"])
+        except ValueError:
+            return None
+        if not isinstance(record, dict):
+            return None
+        status = NOT_FOUND if entry.get("http_status") == 404 or record.get("errorCode") == 404 else FOUND
+        return Result(status, record, page.call_id, url, page.retrieved_at)
 
     # ------------------------------------------------------------------ 3. gather: registry (GST)
     def s_registry(self) -> dict:

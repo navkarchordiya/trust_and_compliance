@@ -102,7 +102,10 @@ def decide(cfg: dict, o: dict) -> dict:
     # ---- how long it has existed
     year = enr.get("year_founded")
     age_days = dom.get("age_days")
-    if dom.get("status") in UNANSWERED or dom.get("status") == "NOT_FOUND":
+    if dom.get("unregistered"):
+        weak.append(f"The website given ({dom.get('domain')}) is not a registered domain: the domain registry "
+                    "says it is available for registration.")
+    elif dom.get("status") in UNANSWERED or dom.get("status") == "NOT_FOUND":
         cannot.append(f"Domain age: {dom.get('missing') or dom.get('error')}.")
     if age_days is not None:
         if age_days < cfg["age"]["young_domain_days"]:
@@ -187,7 +190,8 @@ def decide(cfg: dict, o: dict) -> dict:
         if pages and all("cert_date_invalid" in (p.get("error") or "").lower() for p in pages):
             weak.append(f"The website {req.get('domain')} has an expired security certificate: it may no longer "
                         "be maintained (seen on brands absorbed into other companies).")
-        if pages and all("host not found" in (p.get("error") or "").lower() for p in pages):
+        if pages and all("host not found" in (p.get("error") or "").lower() for p in pages) \
+                and not dom.get("unregistered"):          # the same fact, already reported from the registry
             weak.append(f"The website given ({req.get('domain')}) does not exist: no DNS record "
                         f"(checked {', '.join(p['url'] for p in pages)}).")
     elif reg.get("status") == "DONE" and not reg.get("gstins"):

@@ -144,3 +144,28 @@ class TestDeclaredDirectors(Base):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestDomainRegistryFallback(Base):
+    def test_rdap_down_is_read_through_web_fetch(self):
+        record = json.dumps({"events": [{"eventAction": "registration", "eventDate": "2011-05-04T00:00:00Z"}]})
+        fake = FakeJobs(company(), postings=[("Fleet Manager", "2026-11-15T10:00:00")], timeout_on={"rdap"},
+                        pages={"https://rdap.org/domain/acmefreight.in": record})
+        job, r = self.run_job(fake)
+        self.assertEqual(r["how_long_it_has_existed"]["domain_registered"], "2011-05-04T00:00:00Z")
+        fact = next(f for f in r["facts"] if "registration date" in f["claim"])
+        self.assertIn("Crustdata Web Fetch", fact["claim"])
+        self.assertEqual(fact["field_or_passage"], "events[0].eventDate")
+        self.assertEqual(r["verdict"], "REAL_AND_TRADING", r)
+
+    def test_unregistered_domain_is_reported_once(self):
+        class Unregistered(FakeJobs):
+            def __call__(self, method, url, headers, body, timeout):
+                if "rdap.org" in url:
+                    return 404, {}, json.dumps({"errorCode": 404, "title": "Not Found",
+                                                "description": ["Domain acme-x.in is available for registration"]})
+                return super().__call__(method, url, headers, body, timeout)
+        job, r = self.run_job(Unregistered(company()), {"name": "Acme X", "website": "acme-x.in"})
+        hits = [x for x in r["looks_off"]["weak"] if "not a registered domain" in x]
+        self.assertEqual(len(hits), 1, r["looks_off"])
+        self.assertFalse(any("Domain age" in x for x in r["cannot_verify"]))

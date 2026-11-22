@@ -22,7 +22,9 @@ one, so the check is slow, manual and error-prone.
 python -m vendorcheck run --name "Acme Freight Pvt Ltd" --website acmefreight.in
 python -m vendorcheck run --text "Here is a new vendor: 'Acme Freight', acmefreight.in. Is it real?"
 python -m vendorcheck run --name "Acme Freight Pvt Ltd" --website acmefreight.in --gstin 27AAACA1234A1ZK   # example format; use the vendor's real GSTIN
-python -m vendorcheck batch requests.json     # JSON list or CSV (name, website, text, gstin); restart-safe
+python -m vendorcheck run --name "TCI Express Limited" --website tciexpress.in \
+    --cin L62200TG2008PLC061781 --director "Chander Agarwal" --director "Mukti Lal"   # optional: CIN and directors from the vendor's form
+python -m vendorcheck batch requests.json     # JSON list or CSV (name, website, text, gstin, cin, directors); restart-safe
 python -m vendorcheck eval tests/cases.json   # batch + pass / safe miss / wrong against each row's "expected"
                                               # ("!REAL_AND_TRADING" = a front must never be approved)
 ```
@@ -34,14 +36,16 @@ date where the source gives one (article date, domain registration, GST registra
 
 | Verdict | Meaning | Recommended action (a person approves) |
 |---|---|---|
-| `REAL_AND_TRADING` | Identity resolved, someone confirmed running it, evidence it operates, no strong red flag | add to approved vendors |
+| `REAL_AND_TRADING` | Identity resolved, someone confirmed running it, evidence it operates, **a dated record from the last 180 days** (a job posting, or news naming the firm), no strong red flag | add to approved vendors |
 | `FRONT_SUSPECTED` | ≥ 2 independent strong red flags, each with a source | reject vendor |
 | `HOLD_FOR_REVIEW` | One strong red flag, adverse news linked to the vendor, a duplicate, or an ambiguous identity | manual review |
 | `CANNOT_VERIFY` | A key question has no source (no record, timeout, budget). The output names what is missing | manual review |
 
-The result also lists: who runs it (confirmed on their own profile or not), founding year and
-domain registration date, trading evidence, red flags, namesakes cleared, what could not be
-verified, every fact with its source, and the cost of the run.
+The result also lists: who runs it (confirmed on their own profile or not, and any directors the vendor
+named, each screened in the news), founding year, year of incorporation (from the CIN), domain registration
+date and who the domain is registered to, **the newest dated sign of activity** (`latest_activity`), trading
+evidence, red flags, namesakes cleared, what could not be verified, every fact with its source, and the
+cost of the run.
 
 ## Pass mark
 
@@ -64,7 +68,10 @@ verified, every fact with its source, and the cost of the run.
 | Crustdata `POST /web/enrich/live` | Read an article that names a leader, to link or clear a namesake; the passage is stored | 1 credit per article (max 4) |
 | Crustdata `POST /web/enrich/live` (vendor homepage) | GSTIN printed on the vendor's own website, kept as a verbatim passage | 1 credit |
 | GST registry via Cashfree Secure ID (`/verification/gstin`, optional) | GST status, legal and trade name, registration date for the GSTIN | per provider plan |
-| RDAP (`rdap.org`) | Domain registration date, independent of the company's own claims | free |
+| Crustdata `POST /job/search` | **Is it active now**: the vendor's newest job postings, each with the date it was added | 0.03 credits per listing (3 listings) |
+| CIN on the vendor's homepage or form (decoded offline) | Year of incorporation, state, listed or not, company type, from the MCA identifier itself | free (same homepage read) |
+| RDAP (`rdap.org`) | Domain registration date and, where the registry shows it, the organisation the domain is registered to | free |
+| RDAP through Crustdata `POST /web/enrich/live` | Fallback when `rdap.org` does not answer: the same RDAP record, fields cited the same way | 1 credit, only on failure |
 
 ## Review app (the compliance team's screen)
 
@@ -102,6 +109,12 @@ person can reject the vendor, which updates the register.
 | Malformed input ("N/A" website, free text) | A bad website is "no website"; a name read from free text never becomes an accusation | `test_namesake_is_cleared` |
 | Vendor is the victim ("fraudsters posing as …") | Not adverse | `test_vendor_as_victim_is_not_adverse` |
 | Fake or cancelled GSTIN | Check-digit failure or non-active registry status: **strong red flag** | `TestRegistry` |
+| Dormant firm (headcount and "active" flag on an old record, nothing new) | Never approved: approval needs a dated job posting or news naming the firm in the last 180 days; otherwise **cannot verify** "ask for recent invoices" | `test_nothing_recent_is_never_approved` |
+| Brand bought by a rival (Ecom Express → Delhivery) | Website registered to the buyer, newest job 2024, news on its record about the buyer: **not approved**, a person confirms the entity to pay | real data, `test_registered_to_someone_else` |
+| Website that is not even a registered domain | RDAP "available for registration": reported once, from the registry | `test_unregistered_domain_is_reported_once` |
+| Directors named on the vendor's form | Each screened in the news (namesakes cleared the same way); marked "on the company record" or "form only" | `TestDeclaredDirectors` |
+| CIN on the form differs from the CIN on the website, or a CIN from this year | Held for review / weak signal | `test_recently_incorporated_and_cin_mismatch` |
+| RDAP down | The same RDAP record is read through Crustdata Web Fetch; facts cite the same RDAP fields | `test_rdap_down_is_read_through_web_fetch` |
 
 | Real data: Blue Dart (real, impersonation scams recognised) | Real data: Shakti Bhog (CMD arrested: held) |
 |---|---|
@@ -111,7 +124,8 @@ person can reject the vendor, which updates the register.
 22 Nov 2026: **16/16 pass, 0 wrong answers**. The cases are Indian logistics firms a 3PL would onboard
 (Delhivery, Blue Dart, TCI Express, XpressBees, Shadowfax, Ecom Express, Safexpress, Gati after its merger into
 Allcargo, Rivigo after its sale), a firm whose CMD was arrested (Shakti Bhog), two lookalike websites, a
-duplicate, a free-text request, an unknown vendor and an ambiguous shell-firm name. It is part of the test suite.
+duplicate, a free-text request, an unknown vendor and an ambiguous shell-firm name. The recordings include
+each firm's newest job postings and its RDAP record. It is part of the test suite.
 
 A wrong answer counts against us more than *cannot verify*, so every rule falls back to
 *cannot verify* or *hold* when the evidence is incomplete.
@@ -155,7 +169,7 @@ deciding at once cannot both act; the review app refuses forms that did not come
 
 See [FINANCE.md](FINANCE.md): who pays today (₹69–₹1,500 data reports, ~₹2,150 outsourced checks,
 30–60 analyst minutes per vendor, with sources), our price (**₹499 per vendor check**, *cannot verify*
-free, **₹49/vendor/month** monitoring), the measured cost per job (**3.2–8.2 Crustdata credits + ≤ ₹5 GST
+free, **₹49/vendor/month** monitoring), the measured cost per job (**3.3–8.3 Crustdata credits + ≤ ₹5 GST
 lookup**, 0.2 for a duplicate) and the margin at different credit prices.
 `python -m vendorcheck costs` prints the measured mean, p90 and max cost per job across every run.
 

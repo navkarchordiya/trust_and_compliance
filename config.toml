@@ -45,6 +45,9 @@ young_domain_days = 180        # domain younger than this is a weak signal
 age_mismatch_years = 3         # claimed founding year older than domain by this = strong signal
 young_company_years = 1        # CIN shows incorporation this recently (years) = weak signal
 
+[domain]
+fallback_via_web_fetch = true  # RDAP down: read the same RDAP record through Crustdata Web Fetch (1 credit)
+
 [operating]
 min_headcount = 3              # fewer visible employees than this = weak signal
 

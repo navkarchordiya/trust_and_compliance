@@ -130,6 +130,25 @@ What we tried, what works, and what comes next. (The guide: "They are the heart 
   - An expired TLS certificate on the vendor's site is a weak signal, never a verdict on its own.
   - Identify is documented as free but charged 0.2 credits per match: cost estimates updated (FINANCE.md).
 
+- 14:05 **"Real and ACTIVE"** (the brief's own words). A headcount and an "active" flag can be years old, so
+  approval now needs a dated record from the last 180 days: the vendor's newest job postings (Crustdata Job
+  Search, 0.03 credits per listing) or a news item on its record whose title names the firm. Real data:
+  Delhivery's newest posting is 5 days old, Rivigo's is from Sep 2022, Ecom Express's from Jul 2024. The newest
+  news item on Ecom Express's record is about Delhivery, so news counts only if it names the vendor.
+  - RDAP read live (through Crustdata Web Fetch, since rdap.org is blocked from the build box; this is also
+    now the automatic fallback when rdap.org fails). `.in` records name the registrant organisation:
+    tciexpress.in → TCI EXPRESS LIMITED, shadowfax.in → Shadowfax Technologies Private Limited, and
+    **ecomexpress.in → Delhivery Limited** (Delhivery completed buying 99.87% of Ecom Express in Jul 2025,
+    per its NSE filing). That case was labelled "real and trading" before; it is now "not approved".
+  - CIN (company registration number) read from the vendor's homepage or form and decoded: year of
+    incorporation, state, listed or not, company type. Recent incorporation and a form/website mismatch are
+    flagged. Registry mirrors that list MCA status and directors (Zauba, Tofler) block automated reads, so
+    the MCA register itself is still "cannot verify" and named in the output.
+  - Directors named on the vendor's form are screened in the news with the leaders (same namesake rules).
+  - A domain the registry says is "available for registration" is reported once, as a fact from RDAP.
+  - Job Search rate-limits bursts (429, retry after 50 s; seen while recording): the client already waits
+    for the rate-limit header.
+
 ## Declared before 10:15
 
 TODO before submitting: list anything written before 10:15 (code, prompts, notes), or write "Nothing".
