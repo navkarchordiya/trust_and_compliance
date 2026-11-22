@@ -29,7 +29,8 @@ python -m vendorcheck eval tests/cases.json   # batch + pass / safe miss / wrong
 
 ## Finished result
 
-One verdict, with every fact linked to its source (the field or passage, and the date retrieved):
+One verdict, with every fact linked to its source: the exact field or verbatim passage, the record's own
+date where the source gives one (article date, domain registration, GST registration), and when it was retrieved:
 
 | Verdict | Meaning | Recommended action (a person approves) |
 |---|---|---|
@@ -58,8 +59,8 @@ verified, every fact with its source, and the cost of the run.
 | Crustdata `POST /company/identify` | Resolve the domain or name to one company, with a confidence score | free |
 | Crustdata `POST /company/enrich` | Status, founding year, headcount, HQ, hiring, news, founders/CXOs with their own employment history | 2 credits |
 | Crustdata `POST /person/enrich` | Fallback only: a leader whose employment history was missing | 1+ credit per person |
-| Crustdata `POST /web/search/live` (news, IN) | Adverse news about the company and each leader | 1 credit per page |
-| Crustdata `POST /web/enrich/live` | Fetch each article; the passage is stored as evidence | 1 credit per page |
+| Crustdata `POST /web/search/live` (news, IN) | Adverse news: ONE combined search for the company and its leaders (English and Hindi terms) | 1 credit |
+| Crustdata `POST /web/enrich/live` | Read an article that names a leader, to link or clear a namesake; the passage is stored | 1 credit per article (max 4) |
 | Crustdata `POST /web/enrich/live` (vendor homepage) | GSTIN printed on the vendor's own website, kept as a verbatim passage | 1 credit |
 | GST registry via Cashfree Secure ID (`/verification/gstin`, optional) | GST status, legal and trade name, registration date for the GSTIN | per provider plan |
 | RDAP (`rdap.org`) | Domain registration date, independent of the company's own claims | free |
