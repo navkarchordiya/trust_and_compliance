@@ -68,8 +68,12 @@ def run_batch(store: Store, cfg: dict, pipe: Pipeline, path: str, log=print) -> 
 
 
 def grade(expected: str | None, got: str | None) -> str:
+    """expected: one verdict, several separated by |, or !VERDICT for "anything but this one"
+    (e.g. a front company must never come back REAL_AND_TRADING)."""
     if not expected:
         return "NO_EXPECTED"
+    if expected.strip().startswith("!"):
+        return "FAIL" if got == expected.strip()[1:].upper() else "PASS"
     allowed = {e.strip().upper() for e in expected.replace(",", "|").split("|") if e.strip()}
     if got in allowed:
         return "PASS"
@@ -107,3 +111,26 @@ def import_vendors(store: Store, path: str) -> str:
                                      "client-register")
         count += 1
     return f"imported {count} vendors from {path}"
+
+
+def rescreen(store: Store, cfg: dict, pipe: Pipeline, log=print) -> list[dict]:
+    """Re-screen every vendor approved through this service: news and GST registry again, the rest
+    carried over. One job per vendor per day, so re-running after a crash resumes instead of repeating."""
+    from datetime import date
+    originals = [row["job_id"] for row in store.db.execute(
+        "SELECT DISTINCT job_id FROM vendor_register WHERE decision='approved' AND job_id <> 'client-register'")]
+    summary = []
+    for original in originals:
+        job = store.job(original)
+        if not job:
+            continue
+        request = {**json.loads(job["request_json"]), "rescreen_of": original}
+        job_id = new_job(store, request, job_id=f"rs_{original}_{date.today():%Y%m%d}")
+        if store.job(job_id)["stage"] != "done":
+            log(f"re-screening {original} as {job_id}")
+            pipe.run(job_id)
+        result = build_result(store, cfg, job_id)
+        summary.append({"vendor": request.get("name") or request.get("website"), "original": original,
+                        "was": job["verdict"], "now": result.get("verdict"), "job": job_id,
+                        "credits": (result.get("cost") or {}).get("crustdata_credits")})
+    return summary

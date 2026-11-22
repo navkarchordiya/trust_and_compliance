@@ -21,6 +21,7 @@ python -m vendorcheck run --text "Here is a new vendor: 'Acme Freight', acmefrei
 python -m vendorcheck run --name "Acme Freight Pvt Ltd" --website acmefreight.in --gstin 27AAACA1234A1Z5
 python -m vendorcheck batch requests.json     # JSON list or CSV (name, website, text, gstin); restart-safe
 python -m vendorcheck eval tests/cases.json   # batch + pass / safe miss / wrong against each row's "expected"
+                                              # ("!REAL_AND_TRADING" = a front must never be approved)
 ```
 
 ## Finished result
@@ -71,6 +72,17 @@ it, who runs it, every fact with its field or passage, record date and retrieval
 raw response behind any API fact, see the cost ledger and event log, and approve or decline. Approving
 twice does nothing the second time. Killing the server mid-check and starting it again resumes the
 check. `python -m vendorcheck report JOB --html` writes the same evidence file as a standalone page.
+
+## Monitoring approved vendors
+
+```bash
+python -m vendorcheck rescreen       # e.g. monthly, from cron
+```
+Every vendor approved through the service is checked again: the GST registry and the news (company and
+leaders) are re-run; who the company is, its profile and leaders are carried over with their original
+sources, so a re-screen costs about 1–2 credits instead of 4–8. No change: the job closes quietly. Anything
+else (new adverse news, cancelled GST) goes to a person with an alert in the outbox, exactly once; the
+person can reject the vendor, which updates the register.
 
 ## Hard cases (from the brief) and how each is handled
 
@@ -124,15 +136,11 @@ the vendor or anyone outside.
 
 ## Financial feasibility
 
-- **Buyer:** the client's procurement / vendor-onboarding team (compliance signs off). Today they pay an
-  outside verification firm per vendor, or spend analyst hours on manual checks.
-- **Price:** ₹ ___ per vendor cleared (fill in), charged only when a verdict is delivered.
-- **Measured cost per job:** shown on every result (`cost.crustdata_credits`, `cost.inr`) and per call in
-  `python -m vendorcheck ledger JOB`. A typical run is Identify (free) + Enrich (2) + homepage (1) + one
-  combined news search (1) + up to 4 article fetches = **4 to 8 credits**; duplicates stop after Identify.
-  Rupee figures use `[cost] inr_per_credit` in `config.toml`: set it to your plan's real rate.
-- **Margin** = price − (credits × ₹/credit + GST lookup + LLM, none used today).
-- `python -m vendorcheck costs` prints the measured mean, p90 and max cost per job across every run.
+See [FINANCE.md](FINANCE.md): who pays today (₹69–₹1,500 data reports, ~₹2,150 outsourced checks,
+30–60 analyst minutes per vendor, with sources), our price (**₹499 per vendor check**, *cannot verify*
+free, **₹49/vendor/month** monitoring), the measured cost per job (**4–8 Crustdata credits + ≤ ₹5 GST
+lookup**, 0 for a duplicate) and the margin at different credit prices.
+`python -m vendorcheck costs` prints the measured mean, p90 and max cost per job across every run.
 
 ## Robustness
 

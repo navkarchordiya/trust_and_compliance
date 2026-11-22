@@ -181,6 +181,8 @@ class TestRestartAndBatch(Base):
         self.assertEqual(grade("FRONT_SUSPECTED", "CANNOT_VERIFY"), "SAFE_MISS")
         self.assertEqual(grade("FRONT_SUSPECTED", "REAL_AND_TRADING"), "FAIL")
         self.assertEqual(grade("REAL_AND_TRADING|CANNOT_VERIFY", "CANNOT_VERIFY"), "PASS")
+        self.assertEqual(grade("!REAL_AND_TRADING", "CANNOT_VERIFY"), "PASS")
+        self.assertEqual(grade("!REAL_AND_TRADING", "REAL_AND_TRADING"), "FAIL")
 
 
 if __name__ == "__main__":
@@ -272,3 +274,41 @@ class TestClientRegisterAndEthics(Base):
         from vendorcheck.report import cost_summary
         self.run_job(Fake(company()))
         self.assertIn("credits per job", cost_summary(self.store, self.cfg))
+
+
+class TestRescreen(Base):
+    def test_rescreen_is_cheap_and_alerts_once_on_new_adverse_news(self):
+        from vendorcheck.batch import rescreen
+        first = Fake(company())
+        job, r = self.run_job(first)
+        decide_approval(self.store, job, "tester")
+
+        # A month later the founder is in the news, linked to the vendor.
+        news = [{"subject": "Ravi Menon", "title": "Acme Freight director Ravi Menon arrested in GST fraud",
+                 "url": "https://news.example/later", "snippet": "Ravi Menon of Acme Freight arrested."}]
+        pages = {"https://news.example/later": "<p>Ravi Menon, director of Acme Freight Private Limited, "
+                                               "was arrested for fraud.</p>"}
+        later = Fake(company(), news=news, pages=pages)
+        pipe = Pipeline(self.store, self.cfg, transport=later, sleep=lambda s: None, log=lambda m: None)
+        rows = rescreen(self.store, self.cfg, pipe, log=lambda m: None)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["now"], "HOLD_FOR_REVIEW")
+        self.assertNotIn("/company/enrich", later.count)            # profile carried over, not paid again
+        self.assertNotIn("/company/identify", later.count)
+        self.assertLess(rows[0]["credits"], r["cost"]["crustdata_credits"])
+
+        again = rescreen(self.store, self.cfg, pipe, log=lambda m: None)   # same day: resumes, no repeat
+        self.assertEqual(again[0]["job"], rows[0]["job"])
+        alerts = self.store.db.execute("SELECT COUNT(*) c FROM outbox WHERE body LIKE 'Monitoring alert%'").fetchone()
+        self.assertEqual(alerts["c"], 1)
+        facts = build_result(self.store, self.cfg, rows[0]["job"])["facts"]
+        self.assertTrue(any("(from the original check)" in f["claim"] for f in facts))
+
+    def test_rescreen_no_change_closes_quietly(self):
+        from vendorcheck.batch import rescreen
+        job, _ = self.run_job(Fake(company()))
+        decide_approval(self.store, job, "tester")
+        pipe = Pipeline(self.store, self.cfg, transport=Fake(company()), sleep=lambda s: None, log=lambda m: None)
+        rows = rescreen(self.store, self.cfg, pipe, log=lambda m: None)
+        self.assertEqual(rows[0]["now"], "REAL_AND_TRADING")
+        self.assertEqual(self.store.job(rows[0]["job"])["status"], "closed")

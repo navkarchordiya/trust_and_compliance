@@ -82,6 +82,13 @@ What we tried, what works, and what comes next. (The guide: "They are the heart 
   JSON-lines event log per job, written reason required to overrule the recommendation, retention purge,
   `costs` (measured mean / p90 per job), `scripts/kill_demo.sh` for the kill-on-stage demo. 37 tests.
 
+- 13:10 Review app (`serve`): evidence file, raw response behind each API fact, ledger, approvals; resumes
+  unfinished checks on start. Enrich requests `metadata` (refresh date as record date when Crustdata fills it;
+  null for Delhivery today). FINANCE.md with sourced ₹ benchmarks. `rescreen` for monitoring: carries the
+  profile over, re-runs news + GST (~1–2 credits), alerts once. `eval` accepts `!REAL_AND_TRADING`: news about
+  shell firms after 1 Sep 2026 rarely names one with a website, so for fronts the property we test is
+  "never approved". 40 tests.
+
 ## Declared before 10:15
 
 TODO before submitting: list anything written before 10:15 (code, prompts, notes), or write "Nothing".

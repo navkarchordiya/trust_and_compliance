@@ -17,6 +17,7 @@
   python -m vendorcheck purge --days 30   # delete stored raw responses of closed jobs (retention)
   python -m vendorcheck log JOB           # the run's event log
   python -m vendorcheck serve [--port N]  # review app: start checks, read evidence, approve
+  python -m vendorcheck rescreen          # monitoring: re-check approved vendors (news + GST)
   python -m vendorcheck report JOB --html # the evidence file as a web page
 """
 import argparse
@@ -75,6 +76,7 @@ def main(argv=None):
     pg.add_argument("--days", type=float, default=cfg.get("privacy", {}).get("retention_days", 30))
     lg = sub.add_parser("log")
     lg.add_argument("job")
+    sub.add_parser("rescreen")
     sv = sub.add_parser("serve")
     sv.add_argument("--port", type=int, default=8765)
     sv.add_argument("--host", default="127.0.0.1")
@@ -91,7 +93,7 @@ def main(argv=None):
         res = build_result(store, cfg, job_id)
         print(json.dumps(res, indent=2, ensure_ascii=False) if as_json else render_text(res))
 
-    if args.cmd in ("run", "resume", "batch", "eval", "serve") and not os.environ.get("CRUSTDATA_API_KEY"):
+    if args.cmd in ("run", "resume", "batch", "eval", "serve", "rescreen") and not os.environ.get("CRUSTDATA_API_KEY"):
         print("WARNING: CRUSTDATA_API_KEY is not set (copy .env.example to .env). "
               "Crustdata checks will come back as 'cannot verify'.", file=sys.stderr)
 
@@ -132,6 +134,12 @@ def main(argv=None):
         n = store.purge_raw_responses(args.days)
         print(f"deleted the raw responses of {n} calls from closed jobs older than {args.days:g} days "
               "(facts, quotes and sources are kept)")
+    elif args.cmd == "rescreen":
+        from .batch import rescreen
+        for row in rescreen(store, cfg, pipe, log=lambda m: print(m, file=sys.stderr)):
+            flag = "no change" if row["now"] == "REAL_AND_TRADING" else "ALERT: sent to a person"
+            print(f"{row['vendor']:<32} was {row['was']:<17} now {row['now']:<17} {row['credits']} cr  {flag}  "
+                  f"({row['job']})")
     elif args.cmd == "serve":
         from .web import serve
         serve(str(store.path), cfg, args.host, args.port)

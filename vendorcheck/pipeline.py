@@ -20,6 +20,9 @@ from .store import Store, now_iso
 STAGES = ["take_request", "plan", "identify", "enrich", "domain_age", "registry", "leaders", "media",
           "decide", "hand_over", "done"]
 GATHER_STAGES = STAGES[: STAGES.index("decide")]
+# A re-screen of an approved vendor reuses these from the original check (who the company is, its
+# profile and leaders, its domain age) and only re-runs what changes: the GST registry and the news.
+CARRIED_STAGES = ("identify", "enrich", "domain_age", "leaders")
 
 
 def request_keys(req: dict) -> list[str]:
@@ -119,7 +122,10 @@ class Pipeline:
             self.store.log_event(job_id, "stage_start", stage=stage)
             t0 = time.time()
             self.store.clear_facts(job_id, stage)       # a re-run stage rebuilds its own facts
-            out = getattr(self, "s_" + stage)()
+            if self.request.get("rescreen_of") and stage in CARRIED_STAGES:
+                out = self._carry_over(stage)
+            else:
+                out = getattr(self, "s_" + stage)()
             self.store.log_event(job_id, "stage_done", stage=stage, seconds=round(time.time() - t0, 2),
                                  status=out.get("status"), stopped_early=bool(out.get("_stop")))
             nxt = STAGES[STAGES.index(stage) + 1]
@@ -144,6 +150,12 @@ class Pipeline:
             notes.append("No vendor name given: cannot compare the claimed name with the record.")
         gstin = (r.get("gstin") or "").strip().upper() or None
         out = {"name": r.get("name"), "domain": domain, "gstin": gstin, "notes": notes}
+        if r.get("rescreen_of"):
+            out["rescreen_of"] = r["rescreen_of"]
+            if not gstin:      # reuse the GSTIN found in the original check: no need to read the website again
+                found = [g["gstin"] for g in (self.store.stage_output(r["rescreen_of"], "registry") or {})
+                         .get("gstins", []) if g.get("checksum_ok")]
+                out["gstin"] = found[0] if found else None
         if not domain and not r.get("name"):
             out["_stop"] = True
             out["missing"] = "The request has neither a vendor name nor a website."
@@ -255,6 +267,23 @@ class Pipeline:
         else:
             keys = request_keys(req)      # only what the request itself says identifies this vendor
         return self._with_duplicates(out, list(dict.fromkeys(keys)))
+
+    def _carry_over(self, stage: str) -> dict:
+        """Re-screen: copy a stage's output and its facts (with their original sources and dates)
+        from the original check. No outside call, no cost."""
+        original = self.request["rescreen_of"]
+        out = dict(self.store.stage_output(original, stage) or {"status": "SKIPPED"})
+        out.pop("_stop", None)
+        if stage == "identify":
+            out.update(duplicate_of=None, earlier_job=None)    # it is the same vendor, by definition
+        out["carried_over_from"] = original
+        for fact in self.store.facts(original):
+            if fact["stage"] == stage:
+                self.store.add_fact(job_id=self.job_id, stage=stage, claim=fact["claim"] + " (from the original check)",
+                                    value_json=fact["value_json"], source_url=fact["source_url"],
+                                    locator=fact["locator"], quote=fact["quote"], retrieved_at=fact["retrieved_at"],
+                                    call_id=fact["call_id"], record_date=fact["record_date"])
+        return out
 
     def _with_duplicates(self, out: dict, keys: list[str]) -> dict:
         """Duplicate check on the normalised domain and the Crustdata company ID: against the vendor
@@ -576,6 +605,8 @@ class Pipeline:
     # ------------------------------------------------------------------ 5. act, or hand over
     def s_hand_over(self) -> dict:
         d = self.out("decide")
+        if self.request.get("rescreen_of"):
+            return self._hand_over_rescreen(d)
         action = {"REAL_AND_TRADING": "add_to_approved_vendors",
                   "FRONT_SUSPECTED": "reject_vendor"}.get(d["verdict"], "manual_review")
         db = self.store.db
@@ -593,3 +624,29 @@ class Pipeline:
             db.execute("ROLLBACK")
             raise
         return {"recommended_action": action, "approval": "pending"}
+
+    def _hand_over_rescreen(self, d: dict) -> dict:
+        """Monitoring: an approved vendor that still looks real needs nothing. Anything else goes to a
+        person (who may reject it, which updates the register) and alerts the team, exactly once."""
+        original = self.request["rescreen_of"]
+        db = self.store.db
+        db.execute("BEGIN IMMEDIATE")
+        try:
+            if d["verdict"] == "REAL_AND_TRADING":
+                db.execute("UPDATE jobs SET status='closed', verdict=? WHERE id=?", (d["verdict"], self.job_id))
+                outcome = {"monitoring": "no change", "approval": "not needed"}
+            else:
+                db.execute("INSERT OR IGNORE INTO approvals (job_id, recommended_action, reason, status) "
+                           "VALUES (?, 'manual_review', ?, 'pending')", (self.job_id, d["summary"]))
+                db.execute("INSERT OR IGNORE INTO outbox (idempotency_key, to_team, body, created_at) VALUES (?,?,?,?)",
+                           (f"{self.job_id}:monitoring_alert", "compliance-approvers",
+                            f"Monitoring alert for an approved vendor (first checked in {original}): now "
+                            f"{d['verdict']}. {d['summary']}", now_iso()))
+                db.execute("UPDATE jobs SET status='pending_approval', verdict=? WHERE id=?",
+                           (d["verdict"], self.job_id))
+                outcome = {"monitoring": "changed", "approval": "pending", "recommended_action": "manual_review"}
+            db.execute("COMMIT")
+        except Exception:
+            db.execute("ROLLBACK")
+            raise
+        return outcome

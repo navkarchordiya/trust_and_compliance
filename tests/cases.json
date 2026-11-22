@@ -2,11 +2,17 @@
   {"case": "honest established firm", "name": "Delhivery Limited", "website": "delhivery.com",
    "expected": "REAL_AND_TRADING"},
   {"case": "lookalike website for a known name", "name": "Delhivery Limited", "website": "delhivery-logistics-india.com",
-   "expected": "HOLD_FOR_REVIEW|FRONT_SUSPECTED|CANNOT_VERIFY"},
+   "expected": "!REAL_AND_TRADING"},
   {"case": "same vendor again (duplicate)", "name": "DELHIVERY LTD", "website": "https://www.delhivery.com/",
    "expected": "HOLD_FOR_REVIEW"},
   {"case": "plain-words request", "text": "New carrier to onboard: 'Blue Dart Express Limited', bluedart.com. Is it real?",
    "expected": "REAL_AND_TRADING|HOLD_FOR_REVIEW"},
+  {"case": "known name on someone else's website", "name": "Blue Dart Express", "website": "delhivery.com",
+   "expected": "!REAL_AND_TRADING"},
   {"case": "no record anywhere", "name": "Sharma Trading Co", "website": "sharma-trading-co-2026.in",
-   "expected": "CANNOT_VERIFY"}
+   "expected": "CANNOT_VERIFY"},
+  {"case": "shell firm named in GST-fraud news (no website, no record)", "name": "RK Enterprises",
+   "expected": "!REAL_AND_TRADING"},
+  {"case": "real firm, leader in adverse news (Vedant's live case)", "name": "Shakti Bhog Foods Limited",
+   "expected": "HOLD_FOR_REVIEW"}
 ]
