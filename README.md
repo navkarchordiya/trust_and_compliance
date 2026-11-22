@@ -159,7 +159,12 @@ deciding at once cannot both act; the review app refuses forms that did not come
   professional profiles, and only for their current employer and title. No protected attributes
   (religion, caste, gender, ...) are collected or used. Raw responses are deleted after
   `[privacy] retention_days` (`python -m vendorcheck purge`); the facts and quotes stay as the evidence
-  file.
+  file. Directors the vendor names on its form are used only to screen the news; we do not search for
+  their profiles (a name search returns strangers: tested live, the dataset's "Chander Agarwal" matches
+  were a clerk and two GMs elsewhere), so a director we cannot place is reported as "form only".
+- **A dormant or sold firm is not called active.** Approval needs a dated record from the last 180 days;
+  a firm bought by a rival (website registered to the buyer) goes to a person, so a payment does not go to
+  an entity that no longer trades on its own.
 - **Agents stay in the room.** No email or message goes to the vendor or anyone outside. Notifications go
   to an internal outbox for the client's team.
 - **Uncertainty is stated, not guessed.** If a source times out or has no record, the result says

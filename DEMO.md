@@ -6,9 +6,9 @@
 |---|---|---|
 | 0:00–0:15 | README top | "Compliance teams are paid to decide whom to trust before money moves. Vendor Check does that whole job: a new vendor in, a sourced verdict out, and a person approves." |
 | 0:15–0:50 | `python -m vendorcheck serve`, start a check on a real vendor | Verdict, the reasons, who runs it (confirmed on their own profile), how long it has existed, every fact with its field, record date and retrieval time. Click "stored response" on one fact. |
-| 0:50–1:10 | A lookalike: real firm's name on another website | "The website is unknown, the name belongs to a firm on another domain: lookalike. We never borrow the real firm's records." |
+| 0:50–1:10 | A lookalike, then Ecom Express (`docs/real_ecom_express.txt`) | "Lookalike: the name belongs to a firm on another domain; we never borrow its records. And 'real' is not enough, it must be *active*: Ecom Express still has 13,000 employees on record, but its website is registered to Delhivery, which bought it, and its newest job is from 2024. Held for a person." |
 | 1:10–1:30 | `./scripts/kill_demo.sh` | Killed mid-run with `kill -9`, resumed, ledger shows no call paid twice, approve twice: done once. |
-| 1:30–1:50 | Cost card + `python -m vendorcheck costs` | "4–8 credits per check, a duplicate costs 0. We charge ₹499; an outsourced check is about ₹2,150 and takes days." |
+| 1:30–1:50 | Cost card + `python -m vendorcheck costs` | "3–8 credits per check, a duplicate costs 0.2. We charge ₹499; an outsourced check is about ₹2,150 and takes days." |
 | 1:50–2:00 | Approval form | "Nothing irreversible without a named person; overruling needs a written reason." |
 
 ## Finals: 3-minute live run (includes the kill)
@@ -30,6 +30,9 @@
 | New adverse word | `config.toml` `[media] adverse_terms` | 30 s |
 | Approver must be from a list | `actions.decide_approval`: check `by` against a config list | 2 min |
 | New source field | `pipeline.s_enrich`: one `f("claim", "json.path")` line; it is cited automatically | 1 min |
+| "Active" window (e.g. 90 days) or turn the active check off | `config.toml` `[activity] recent_days` / `require_recent_activity` | 30 s |
+| Weak signals that send a firm to a person | `config.toml` `[verdict] weak_signals_for_review` | 30 s |
+| New request field (e.g. PAN) | `pipeline.s_take_request` (copy the `cin` lines), `__main__.py` flag, `web.py` form | 3 min |
 
 Run `python -m unittest discover -s tests` after the change (about 2 s).
 
@@ -53,7 +56,8 @@ and the same inputs give the same answer, so it can be audited and tested.
 ## Ethics questions (25 points)
 
 - *Personal data:* only founders and up to 3 senior leaders, from public professional profiles, and only their
-  current employer and title. No protected attributes. Raw responses are purged after 30 days; facts stay.
+  current employer and title, plus directors the vendor itself names on its form (used only for the news
+  screen). No protected attributes. Raw responses are purged after 30 days; facts stay.
 - *Namesakes:* an article counts against a person only if it also names the vendor; a clearance based on
   absence is labelled weak; an unreadable page is "cannot verify", never a clearance.
 - *Harmful actions:* clearing and rejecting both wait for a named person; overruling needs a reason; nothing is
