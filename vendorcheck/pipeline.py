@@ -165,6 +165,9 @@ class Pipeline:
         if not r.get("name"):
             notes.append("No vendor name given: cannot compare the claimed name with the record.")
         gstin = (r.get("gstin") or "").strip().upper() or None
+        if not gstin and r.get("text"):
+            found = names.find_gstins(r["text"])
+            gstin = found[0] if found else None
         cin = (r.get("cin") or "").strip().upper() or None
         if not cin and r.get("text"):
             found = names.find_cins(r["text"])
@@ -176,7 +179,7 @@ class Pipeline:
             out["cin"] = cin
             if not names.decode_cin(cin):
                 notes.append(f"'{cin}' is not a well-formed CIN (company registration number).")
-        directors = names.parse_people_list(r.get("directors"))
+        directors = names.parse_people_list(r.get("directors")) or names.directors_in_text(r.get("text"))
         if directors:
             out["directors"] = directors
         if r.get("website") and not domain:

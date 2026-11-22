@@ -169,3 +169,17 @@ class TestDomainRegistryFallback(Base):
         hits = [x for x in r["looks_off"]["weak"] if "not a registered domain" in x]
         self.assertEqual(len(hits), 1, r["looks_off"])
         self.assertFalse(any("Domain age" in x for x in r["cannot_verify"]))
+
+
+class TestPlainWordsExtras(Base):
+    def test_directors_and_gstin_read_from_plain_words(self):
+        fake = FakeJobs(company(), postings=[("Fleet Manager", "2026-11-15T10:00:00")])
+        job, r = self.run_job(fake, {"text": "New vendor 'Acme Freight Pvt Ltd', website acmefreight.in. "
+                                             "Directors: Suresh Patil and Mr. Anil Rao. Our logistics partner Blue Dart."})
+        declared = [l["name"] for l in r["who_runs_it"] if l.get("declared")]
+        self.assertEqual(declared, ["Suresh Patil", "Anil Rao"])
+        self.assertIn('"Anil Rao"', fake.queries[0])
+
+    def test_free_text_parsers(self):
+        self.assertEqual(names.directors_in_text("Directors are not known yet"), [])
+        self.assertEqual(names.directors_in_text("promoter is Rakesh Kumar Gupta; website x.in"), ["Rakesh Kumar Gupta"])

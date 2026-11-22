@@ -108,6 +108,24 @@ def parse_free_text(text: str) -> dict:
     return {"name": name, "website": website}
 
 
+_TITLE = r"(?:(?i:mr|mrs|ms|dr|shri|smt)\.?\s+)?"
+_PERSON = _TITLE + r"[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+"
+DIRECTORS_RE = re.compile(r"\b(?i:directors?|promoters?|proprietor)\b\s*(?i:are|is|:|-)?\s*"
+                          r"(" + _PERSON + r"(?:\s*(?:,|;|&|\band\b)\s*" + _PERSON + r")*)")
+
+
+def directors_in_text(text: str | None) -> list[str]:
+    """Names given after "director(s)", "promoter(s)" or "proprietor" in a plain-words request, e.g.
+    "directors: Ravi Menon and Suresh Patil". Each name needs at least two capitalised words."""
+    found = []
+    for m in DIRECTORS_RE.finditer(text or ""):
+        for part in re.split(r"\s*(?:,|;|&|\band\b)\s*", m.group(1)):
+            part = re.sub(r"^(mr|mrs|ms|dr|shri|smt)\.?\s+", "", part.strip(), flags=re.I)
+            if len(part.split()) >= 2 and part not in found:
+                found.append(part)
+    return found[:8]
+
+
 def name_variants(name: str | None) -> list[str]:
     """A record name like "Xpressbees (BusyBees Logistics Solutions Pvt. Ltd.)" is a brand plus a legal
     name; each counts as a name of the same business."""
