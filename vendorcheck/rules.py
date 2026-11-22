@@ -48,8 +48,8 @@ def decide(cfg: dict, o: dict) -> dict:
     elif status == "DOMAIN_MISMATCH":
         top = ident.get("top") or {}
         strong.append(f"Lookalike: no company record has the website {req.get('domain')}, but the name "
-                      f"'{req.get('name')}' matches {top.get('name')}, whose website is {top.get('domain')}. "
-                      "The real firm's records were NOT used for this vendor.")
+                      f"'{req.get('name')}' carries the name of {top.get('name')}, whose own website is "
+                      f"{top.get('domain')}. The real firm's records were NOT used for this vendor.")
         cannot.append(f"Company identity: no company record for the website {req.get('domain')}.")
     elif status == "NAME_UNCONFIRMED":
         top = ident.get("top") or {}
@@ -62,10 +62,17 @@ def decide(cfg: dict, o: dict) -> dict:
                           f"'{req.get('name')}' (closest: '{top.get('name')}', {top.get('domain') or 'no website'}). "
                           "Send the vendor's website.")
     sim = ident.get("name_similarity")
-    if sim is not None and sim < cfg["identity"]["min_name_similarity"] and status == "RESOLVED":
+    top_rec = ident.get("top") or {}
+    if sim is not None and status == "RESOLVED" and \
+            not names.names_match(req.get("name"), top_rec.get("name"), cfg["identity"]["min_name_similarity"]):
         mismatch = (f"Name mismatch: the request says '{req.get('name')}' but the website belongs to "
-                    f"'{ident['top']['name']}' (similarity {sim}).")
-        if req.get("name_from_text"):
+                    f"'{top_rec.get('name')}' (similarity {sim}).")
+        if req.get("domain") and top_rec.get("domain") and req["domain"] != top_rec.get("domain"):
+            # The website is a SECONDARY domain of that record (seen live: gati.com is listed on Allcargo
+            # Logistics after the merger): most likely a rebrand or merger, not an impersonation.
+            weak.append(mismatch + f" {req['domain']} is listed on that record as a secondary website of "
+                        f"{top_rec.get('domain')}: probably a rebrand or merger; confirm the legal entity to pay.")
+        elif req.get("name_from_text"):
             # The name was read out of free text by us; a parsing slip must not become an accusation.
             weak.append(mismatch + " The name was read from the request's text: confirm it.")
         else:
@@ -134,6 +141,9 @@ def decide(cfg: dict, o: dict) -> dict:
     if reg.get("status") in UNANSWERED:
         cannot.append(f"GST registration: {reg.get('missing') or 'the website could not be read'}.")
         pages = reg.get("pages") or []
+        if pages and all("cert_date_invalid" in (p.get("error") or "").lower() for p in pages):
+            weak.append(f"The website {req.get('domain')} has an expired security certificate: it may no longer "
+                        "be maintained (seen on brands absorbed into other companies).")
         if pages and all("host not found" in (p.get("error") or "").lower() for p in pages):
             weak.append(f"The website given ({req.get('domain')}) does not exist: no DNS record "
                         f"(checked {', '.join(p['url'] for p in pages)}).")
@@ -183,10 +193,21 @@ def decide(cfg: dict, o: dict) -> dict:
     leaders = lead.get("leaders") or []
     confirmed = [l for l in leaders if l.get("confirmed")]
     refuted = [l for l in leaders if l.get("confirmed") is False]
-    if confirmed:
-        positive.append("Run by: " + ", ".join(f"{l['name']} ({l.get('current_title') or l.get('title')})"
-                                               for l in confirmed) + ", confirmed on their own profiles.")
-    elif enr.get("status") == "FOUND":
+    def shown_title(leader):
+        return leader.get("current_title") or leader.get("title")
+
+    # A "CXO" whose own job entry at the vendor is not a leadership role (seen live: a headline of
+    # "Chief Administrative Officer" over a TCI Express job of "Senior Territory Manager") works there,
+    # but is not reported as running it.
+    runs_it = [l for l in confirmed if l.get("group") == "founders" or names.is_leadership_title(shown_title(l))]
+    staff = [l for l in confirmed if l not in runs_it]
+    if runs_it:
+        positive.append("Run by: " + ", ".join(f"{l['name']} ({shown_title(l)})" for l in runs_it)
+                        + ", confirmed on their own profiles.")
+    if staff:
+        positive.append("Also works there: " + ", ".join(f"{l['name']} ({shown_title(l)})" for l in staff)
+                        + ", confirmed on their own profiles.")
+    if not confirmed and enr.get("status") == "FOUND":
         cannot.append("Who runs it: no leader could be confirmed from their own profile.")
     if refuted and not confirmed:
         weak.append("Listed leaders do not show the vendor as a current employer: "

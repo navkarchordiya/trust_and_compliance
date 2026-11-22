@@ -114,6 +114,22 @@ What we tried, what works, and what comes next. (The guide: "They are the heart 
   not in the ledger; two racing approvals both acted; a kill after hand-over could leave a job open; decline
   was not atomic; some flags had no cited field; the review app had no CSRF/Host check.
 
+- 14:30 **Real-data set doubled: 16/16 pass, 0 wrong answers** (57 real answers recorded). What the new real
+  data broke:
+  - Gati Limited now lists Allcargo's website first (merger). A requested website that is only a SECONDARY
+    domain of the record is reported as a likely rebrand (weak), not as a lookalike.
+  - "XpressBees" is filed as "Xpressbees (BusyBees Logistics Solutions Pvt. Ltd.)": names are now compared on
+    brand and legal-name variants, and the news query uses the brand without the bracket.
+  - Xpressbees appears in an FIR story as the **victim**; "FIR" and "raid" alone no longer link an article
+    (`ambiguous_terms`): they need a second adverse word about the vendor.
+  - "Xpressbees Logistics" on a website that does not exist: the name carries the whole brand of one known firm
+    with its own website, so it is now called a **lookalike** (was only "name unconfirmed").
+  - TCI Express's "CXO" list has a person whose job there is "Senior Territory Manager" under a "Chief ..."
+    headline: only leadership titles are reported as running the firm; others are listed as working there.
+  - Storefront pages (business.site, IndiaMART, Facebook) are never treated as a company's own website.
+  - An expired TLS certificate on the vendor's site is a weak signal, never a verdict on its own.
+  - Identify is documented as free but charged 0.2 credits per match: cost estimates updated (FINANCE.md).
+
 ## Declared before 10:15
 
 TODO before submitting: list anything written before 10:15 (code, prompts, notes), or write "Nothing".

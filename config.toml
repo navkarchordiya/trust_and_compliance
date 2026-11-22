@@ -18,7 +18,7 @@ backoff_s = 2.0
 reserve_credits_for_news = 1   # under a tight budget, skip the homepage GSTIN read before the news search
 
 [credit_estimates]             # used only when a response has no X-Credits-Used header (ledger marks these "estimated")
-"/company/identify" = 0     # free (docs.crustdata.com/general/pricing)
+"/company/identify" = 0.2   # docs say free, but the live ledger charged 0.2 per matched lookup (22 Nov)
 "/company/enrich" = 2
 "/person/enrich" = 1
 "/web/search/live" = 1
@@ -62,6 +62,10 @@ victim_context = ["impersonat", "posing as", "in the name of", "pretending to be
 # Only phrases that mean "someone pretended to be the vendor". Crime words ("cyber fraud", "phishing",
 # "fraudsters") are NOT here: an article can use them about the vendor itself (independent review, 22 Nov).
 # The pattern "fake <vendor name>" (e.g. "using fake Blue Dart courier identity") is matched in code.
+# Words that appear in news about victims as often as about wrongdoers. They never link news to a vendor on
+# their own; a sentence also needs a clear accusation word. Seen live: "Xpressbees hub manager assaulted ...
+# police files FIR" (Xpressbees was the victim).
+ambiguous_terms = ["fir", "probe", "eow", "cbi", "contempt"]
 # Non-English adverse words (matched as text, since Devanagari has no reliable word boundary).
 adverse_terms_hi = ["गिरफ्तार", "धोखाधड़ी", "घोटाला", "छापा", "छापेमारी", "फ्रॉड", "अरेस्ट", "मनी लॉन्ड्रिंग"]
 

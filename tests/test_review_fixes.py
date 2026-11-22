@@ -123,3 +123,27 @@ class TestRobustness(Base):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestRealDataHelpers(unittest.TestCase):
+    """Helpers added after the second batch of real Crustdata answers (22 Nov)."""
+
+    def test_storefront_pages_are_not_company_websites(self):
+        from vendorcheck import names
+        self.assertTrue(names.is_hosting("acme-freight.business.site"))
+        self.assertTrue(names.is_hosting("indiamart.com"))
+        self.assertFalse(names.is_hosting("delhivery.com"))
+        self.assertFalse(names.is_hosting(None))
+
+    def test_only_leadership_titles_run_the_company(self):
+        from vendorcheck import names
+        self.assertTrue(names.is_leadership_title("Executive Director & CFO"))
+        self.assertTrue(names.is_leadership_title("Co-Founder"))
+        self.assertFalse(names.is_leadership_title("Senior Territory Manager"))
+        self.assertFalse(names.is_leadership_title(None))
+
+    def test_requested_name_carrying_a_known_brand(self):
+        from vendorcheck import names
+        self.assertTrue(names.carries_brand("Xpressbees Logistics",
+                                            "Xpressbees (BusyBees Logistics Solutions Pvt. Ltd.)"))
+        self.assertFalse(names.carries_brand("Sharma Trading Co", "Xpressbees (BusyBees Logistics Solutions Pvt. Ltd.)"))

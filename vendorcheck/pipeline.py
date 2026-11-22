@@ -225,10 +225,12 @@ class Pipeline:
             info = m["company_data"].get("basic_info", {}) or {}
             domains = {names.domain_of(d) for d in (info.get("all_domains") or [])}
             domains |= {names.domain_of(info.get("primary_domain")), names.domain_of(info.get("website"))}
+            domains = {d for d in domains if d and not names.is_hosting(d)}     # storefront pages are not websites
+            primary = names.domain_of(info.get("primary_domain"))
             cands.append({"i": i, "confidence": m.get("confidence_score"),
                           "id": m["company_data"].get("crustdata_company_id"),
                           "name": info.get("name"),
-                          "domain": names.domain_of(info.get("primary_domain")),
+                          "domain": None if names.is_hosting(primary) else primary,
                           "all_domains": sorted(d for d in domains if d),
                           "employees": info.get("employee_count_range"),
                           "name_similarity": names.similarity(req["name"], info.get("name")) if req["name"] else None})
@@ -258,11 +260,18 @@ class Pipeline:
                 strict = [c for c in group if (c["name_similarity"] or 0) >= icfg.get("name_only_min_similarity", 0.85)]
                 strict_sites = {c["domain"] for c in strict}
                 top = same_site[0] if same_site else max(strict or group, key=rank)
+                # Or the requested name carries the whole BRAND of known firms that have their own website
+                # (seen live: "Xpressbees Logistics" on a website that does not exist).
+                brand_firms = [c for c in cands if c["domain"] and names.carries_brand(req["name"], c["name"])]
+                brand_sites = {c["domain"] for c in brand_firms}
                 if same_site:
                     status = "RESOLVED"
-                elif strict and len(strict_sites) == 1 and top["all_domains"]:
+                elif strict and len(strict_sites) == 1 and top["domain"]:
                     # The NAME clearly belongs to a firm with another website: the lookalike pattern.
                     # Never borrow the real firm's evidence for this vendor.
+                    status = "DOMAIN_MISMATCH"
+                elif len(brand_sites) == 1:
+                    top = max(brand_firms, key=rank)
                     status = "DOMAIN_MISMATCH"
                 else:
                     status = "NAME_UNCONFIRMED"  # no single firm clearly carries this name
@@ -395,6 +404,10 @@ class Pipeline:
             members = [(i, p) for i, p in members
                        if isinstance(p, dict) and ((p.get("professional_network") or {}).get("connections") or 0) >= floor]
             if group == "cxos":
+                # Seen live: TCI Express's "CXO" list includes a "Senior Territory Manager". Only a leadership
+                # title counts as someone who runs the company.
+                members = [(i, p) for i, p in members
+                           if names.is_leadership_title((p.get("basic_profile") or {}).get("current_title"))]
                 members.sort(key=lambda ip: -((ip[1].get("professional_network") or {}).get("connections") or 0))
             ranked += [(group, i, p) for i, p in members if isinstance(p, dict)]
 
@@ -625,8 +638,9 @@ class Pipeline:
                 # "by default", or "fraud" two sentences away from the name, is not news about them.
                 naming = [s for s in sentences if sentence_names(kind, subject, s)]
                 hit_terms = sorted({term for s in naming for term, rx in term_patterns if rx.search(s.lower())})
-                if not hit_terms:
-                    continue
+                ambiguous = {t.lower() for t in mcfg.get("ambiguous_terms", [])}
+                if not hit_terms or all(t.lower() in ambiguous for t in hit_terms):
+                    continue        # no clear accusation word next to the name
                 item = {"subject": subject, "kind": kind, "title": (r.get("title") or "")[:200],
                         "url": r.get("url"), "terms": hit_terms, "published": published}
                 if is_victim:

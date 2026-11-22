@@ -57,7 +57,7 @@ verified, every fact with its source, and the cost of the run.
 
 | Source | Used for | Cost |
 |---|---|---|
-| Crustdata `POST /company/identify` | Resolve the domain or name to one company, with a confidence score | free |
+| Crustdata `POST /company/identify` | Resolve the domain or name to one company, with a confidence score | 0.2 (measured) |
 | Crustdata `POST /company/enrich` | Status, founding year, headcount, HQ, hiring, news, founders/CXOs with their own employment history | 2 credits |
 | Crustdata `POST /person/enrich` | Fallback only: a leader whose employment history was missing | 1+ credit per person |
 | Crustdata `POST /web/search/live` (news, IN) | Adverse news: ONE combined search for the company and its leaders (English and Hindi terms) | 1 credit |
@@ -85,7 +85,7 @@ python -m vendorcheck rescreen       # e.g. monthly, from cron
 ```
 Every vendor approved through the service is checked again: the GST registry and the news (company and
 leaders) are re-run; who the company is, its profile and leaders are carried over with their original
-sources, so a re-screen costs about 1–2 credits instead of 4–8. No change: the job closes quietly. Anything
+sources, so a re-screen costs about 1–2 credits instead of 3–8. No change: the job closes quietly. Anything
 else (new adverse news, cancelled GST) goes to a person with an alert in the outbox, exactly once; the
 person can reject the vendor, which updates the register.
 
@@ -108,8 +108,10 @@ person can reject the vendor, which updates the register.
 | ![Blue Dart](docs/screens/blue_dart_real.png) | ![Shakti Bhog](docs/screens/shakti_bhog_hold.png) |
 
 **On real data:** `python scripts/replay_live.py` runs `tests/cases.json` on real Crustdata answers recorded on
-22 Nov 2026 (Delhivery, Blue Dart, Shakti Bhog, a lookalike, a duplicate, an unknown vendor, an ambiguous shell
-name): **8/8 pass, 0 wrong answers**. It is part of the test suite.
+22 Nov 2026: **16/16 pass, 0 wrong answers**. The cases are Indian logistics firms a 3PL would onboard
+(Delhivery, Blue Dart, TCI Express, XpressBees, Shadowfax, Ecom Express, Safexpress, Gati after its merger into
+Allcargo, Rivigo after its sale), a firm whose CMD was arrested (Shakti Bhog), two lookalike websites, a
+duplicate, a free-text request, an unknown vendor and an ambiguous shell-firm name. It is part of the test suite.
 
 A wrong answer counts against us more than *cannot verify*, so every rule falls back to
 *cannot verify* or *hold* when the evidence is incomplete.
@@ -153,8 +155,8 @@ deciding at once cannot both act; the review app refuses forms that did not come
 
 See [FINANCE.md](FINANCE.md): who pays today (₹69–₹1,500 data reports, ~₹2,150 outsourced checks,
 30–60 analyst minutes per vendor, with sources), our price (**₹499 per vendor check**, *cannot verify*
-free, **₹49/vendor/month** monitoring), the measured cost per job (**4–8 Crustdata credits + ≤ ₹5 GST
-lookup**, 0 for a duplicate) and the margin at different credit prices.
+free, **₹49/vendor/month** monitoring), the measured cost per job (**3.2–8.2 Crustdata credits + ≤ ₹5 GST
+lookup**, 0.2 for a duplicate) and the margin at different credit prices.
 `python -m vendorcheck costs` prints the measured mean, p90 and max cost per job across every run.
 
 ## Robustness

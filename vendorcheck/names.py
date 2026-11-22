@@ -37,6 +37,15 @@ def similarity(a: str | None, b: str | None) -> float:
     return round(SequenceMatcher(None, a, b).ratio(), 3)
 
 
+# Pages on these hosts are storefronts or profiles, not a company's own website.
+HOSTING_DOMAINS = {"business.site", "wixsite.com", "blogspot.com", "facebook.com", "indiamart.com", "google.com",
+                   "g.co", "linkedin.com", "instagram.com", "justdial.com", "sulekha.com", "wordpress.com"}
+
+
+def is_hosting(domain: str | None) -> bool:
+    return bool(domain) and any(domain == h or domain.endswith("." + h) for h in HOSTING_DOMAINS)
+
+
 EMPTY_VALUES = {"", "-", "--", "n/a", "na", "none", "null", "nil", "not available", "nan"}
 LABEL_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$")
 # Words that look like domains in free text but are not websites ("Pvt.Ltd", "Pune.Website").
@@ -99,9 +108,45 @@ def parse_free_text(text: str) -> dict:
     return {"name": name, "website": website}
 
 
+def name_variants(name: str | None) -> list[str]:
+    """A record name like "Xpressbees (BusyBees Logistics Solutions Pvt. Ltd.)" is a brand plus a legal
+    name; each counts as a name of the same business."""
+    name = name or ""
+    variants = [name]
+    if "(" in name:
+        variants.append(name.split("(")[0].strip())
+        variants += [part.strip() for part in re.findall(r"\(([^)]+)\)", name)]
+    return [v for v in dict.fromkeys(variants) if v]
+
+
+def names_match(requested: str | None, record: str | None, threshold: float) -> bool:
+    """Same business by name: close overall, or every distinctive word of one name is in the other,
+    for any brand / legal variant of either."""
+    for a in name_variants(requested):
+        for b in name_variants(record):
+            if similarity(a, b) >= threshold or names_same_business(a, b) or names_same_business(b, a):
+                return True
+    return False
+
+
+def carries_brand(requested: str | None, record_name: str | None) -> bool:
+    """The requested name contains the whole brand of a record (e.g. "Xpressbees Logistics" carries the
+    brand of "Xpressbees (BusyBees Logistics Solutions Pvt. Ltd.)")."""
+    return any(names_same_business(variant, requested) for variant in name_variants(record_name))
+
+
+LEADER_TITLE = re.compile(r"\b(chief|ceo|cfo|coo|cto|cio|cmo|chro|cxo|founder|co-?founder|president|chairman|"
+                          r"chairperson|managing director|director|md|owner|partner|proprietor|head)\b", re.I)
+
+
+def is_leadership_title(title: str | None) -> bool:
+    return bool(title) and LEADER_TITLE.search(title) is not None
+
+
 def search_name(name: str | None) -> str:
     """Name to search the news with: legal suffixes dropped, and trailing generic words dropped
     while at least two words remain ('Shakti Bhog Food' -> 'Shakti Bhog', 'Acme Freight' stays)."""
+    name = (name or "").split("(")[0].strip() or (name or "")     # the brand, not the bracketed legal name
     words = [w for w in re.sub(r"[^A-Za-z0-9& ]+", " ", name or "").split() if w.lower() not in SUFFIXES]
     while len(words) > 2 and words[-1].lower() in GENERIC:
         words.pop()

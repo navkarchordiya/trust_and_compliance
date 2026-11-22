@@ -33,24 +33,24 @@ runs (`python -m vendorcheck costs`). Credits per job, from the published credit
 
 | Call | Credits | Notes |
 |---|---|---|
-| Company Identify | 0 | free |
+| Company Identify | 0.2 | the docs list it as free, but the live ledger (`X-Credits-Used`) charged 0.2 per matched lookup on 22 Nov |
 | Company Enrich (basic, headcount, people, news, metadata) | 2 | founders' employment history comes embedded: no Person Enrich needed |
 | Vendor homepage fetch (GSTIN) | 1 | skipped when the GSTIN is in the request |
 | One combined news search (company + leaders) | 1 | |
 | Article fetches | 0 – 4 | only for articles that name a leader next to an adverse word |
 | RDAP domain registration | 0 | public |
 | GST registry lookup | ₹0.70 – ₹5 | e.g. ₹3,500 per 5,000 calls ([GSTZen](https://gstzen.in/gst-validator-api-pricing-details)); ₹1–5 at volume ([KYB vendor survey](https://javajack.github.io/b2b-lending-india/04-integrations/kyc-kyb-vendors/)) |
-| **Total** | **4 – 8 credits + ≤ ₹5** | a duplicate stops after Identify: **0 credits** |
+| **Total** | **3.2 – 8.2 credits + ≤ ₹5** | a duplicate stops after Identify: **0.2 credits** |
 
 Crustdata does not publish a rupee or dollar price per credit (it is set by plan), so the cost per job is
 shown for a range of credit prices. Set `[cost] inr_per_credit` in `config.toml` to the real rate and
 `costs` reports the measured figure.
 
-| ₹ per credit | Cost per job (8 credits + ₹5 GST) | Gross margin at ₹499 |
+| ₹ per credit | Cost per job (worst case: 8.2 credits + ₹5 GST) | Gross margin at ₹499 |
 |---|---|---|
-| ₹4 | ₹37 | 93% |
-| ₹8 | ₹69 | 86% |
-| ₹20 | ₹165 | 67% |
+| ₹4 | ₹38 | 92% |
+| ₹8 | ₹71 | 86% |
+| ₹20 | ₹169 | 66% |
 
 No LLM is called today, so there is no model cost per job.
 

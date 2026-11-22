@@ -19,7 +19,10 @@ class TestLiveReplay(unittest.TestCase):
         finally:
             config_module.ROOT = saved_root
         grades = [grade(row.get("expected"), r.get("verdict")) for row, r in results]
-        self.assertEqual(len(grades), 8)
+        import json
+        from pathlib import Path
+        cases = json.loads((Path(__file__).parent / "cases.json").read_text())
+        self.assertEqual(len(grades), len(cases))
         self.assertNotIn("FAIL", grades, [(row.get("case"), r.get("verdict")) for row, r in results])
         verdicts = {row["case"]: r["verdict"] for row, r in results}
         self.assertEqual(verdicts["honest established firm"], "REAL_AND_TRADING")
