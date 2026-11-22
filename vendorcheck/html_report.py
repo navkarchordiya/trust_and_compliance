@@ -89,7 +89,7 @@ def source_cell(fact: dict, live_links: bool) -> str:
     return f"{shown}<br><span class='muted'>{raw}</span>"
 
 
-def render_job(result: dict, live_links: bool = False, message: str = "") -> str:
+def render_job(result: dict, live_links: bool = False, message: str = "", csrf: str = "") -> str:
     r = result
     request = r.get("request") or {}
     vendor = request.get("name") or request.get("website") or request.get("text") or r["job_id"]
@@ -115,6 +115,7 @@ def render_job(result: dict, live_links: bool = False, message: str = "") -> str
             f"<p>Recommended: <b>{escape(ACTION_LABEL.get(recommended, recommended or '-'))}</b>. "
             f"Nothing irreversible happens until you approve. Choosing a different action needs a reason.</p>"
             f"<form class='inline' method='post' action='/job/{escape(r['job_id'])}/decide'>"
+            f"<input type='hidden' name='csrf' value='{escape(csrf)}'>"
             f"<input name='by' placeholder='Your name' required>"
             f"<select name='action'>{options}</select>"
             f"<input name='reason' placeholder='Reason (needed to overrule)' size='34'>"

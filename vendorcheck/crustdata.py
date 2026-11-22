@@ -5,7 +5,9 @@ from .sources import Result, SourceClient
 
 
 def _no_matches(data) -> bool:
-    return isinstance(data, list) and all(not (item or {}).get("matches") for item in data)
+    if not isinstance(data, list) or not all(isinstance(item, dict) for item in data):
+        raise ValueError("expected a list of {matches: [...]}")
+    return all(not item.get("matches") for item in data)
 
 
 class Crustdata:
@@ -53,7 +55,7 @@ class Crustdata:
     # 1 credit per page, up to 10 urls per request
     def web_fetch(self, url: str) -> Result:
         return self._post("/web/enrich/live", {"urls": [url]},
-                          not_found=lambda d: isinstance(d, list) and not any(x.get("success") for x in d))
+                          not_found=lambda d: isinstance(d, list) and not any(isinstance(x, dict) and x.get("success") for x in d))
 
 
 def rdap_domain(client: SourceClient, domain: str) -> Result:

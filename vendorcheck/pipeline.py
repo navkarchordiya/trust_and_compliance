@@ -72,9 +72,12 @@ def job_matches(job: dict, company_id: str, domain: str, company_name: str | Non
 
 
 def cite_job(ev, stage, person_name, res, job_path, job, profile_url):
-    """Cite just the employer name and title of a current job, not the whole record."""
+    """Cite the employer name, title and start date of a current job, not the whole record."""
     key_emp = "employer_name" if "employer_name" in job else "name"
     key_title = "employee_title" if "employee_title" in job else "title"
+    key_start = "employee_start_date" if "employee_start_date" in job else "start_date"
+    ev.field(stage, f"{person_name}'s own profile: start date in the current job", res, f"{job_path}.{key_start}",
+             source_url=profile_url)
     ev.field(stage, f"{person_name}'s own profile: current employer", res, f"{job_path}.{key_emp}",
              source_url=profile_url)
     ev.field(stage, f"{person_name}'s own profile: current title", res, f"{job_path}.{key_title}",
@@ -122,10 +125,20 @@ class Pipeline:
             self.store.log_event(job_id, "stage_start", stage=stage)
             t0 = time.time()
             self.store.clear_facts(job_id, stage)       # a re-run stage rebuilds its own facts
-            if self.request.get("rescreen_of") and stage in CARRIED_STAGES:
-                out = self._carry_over(stage)
-            else:
-                out = getattr(self, "s_" + stage)()
+            try:
+                if self.request.get("rescreen_of") and stage in CARRIED_STAGES:
+                    out = self._carry_over(stage)
+                else:
+                    out = getattr(self, "s_" + stage)()
+            except (KeyError, IndexError, TypeError, AttributeError, ValueError) as e:
+                if stage in ("decide", "hand_over", "take_request", "plan"):
+                    raise                                   # our own logic: a real bug must be seen
+                # A source answered in a shape we did not expect. Never guess: this check becomes
+                # "cannot verify", the run carries on, and the job never gets stuck on it.
+                self.store.clear_facts(job_id, stage)
+                self.store.log_event(job_id, "stage_error", stage=stage, error=f"{type(e).__name__}: {e}")
+                out = {"status": "ERROR", "stage_error": True,
+                       "missing": f"{stage}: the source answered in an unexpected format ({type(e).__name__})"}
             self.store.log_event(job_id, "stage_done", stage=stage, seconds=round(time.time() - t0, 2),
                                  status=out.get("status"), stopped_early=bool(out.get("_stop")))
             nxt = STAGES[STAGES.index(stage) + 1]
@@ -140,8 +153,11 @@ class Pipeline:
     # ------------------------------------------------------------------ 1. take the request
     def s_take_request(self) -> dict:
         r = dict(self.request)
+        name_from_text = False
         if r.get("text") and not (r.get("name") or r.get("website")):
-            r.update({k: v for k, v in names.parse_free_text(r["text"]).items() if v})
+            parsed = names.parse_free_text(r["text"])
+            r.update({k: v for k, v in parsed.items() if v})
+            name_from_text = bool(parsed.get("name"))
         domain = names.domain_of(r.get("website"))
         notes = []
         if not domain:
@@ -149,7 +165,10 @@ class Pipeline:
         if not r.get("name"):
             notes.append("No vendor name given: cannot compare the claimed name with the record.")
         gstin = (r.get("gstin") or "").strip().upper() or None
-        out = {"name": r.get("name"), "domain": domain, "gstin": gstin, "notes": notes}
+        out = {"name": r.get("name"), "domain": domain, "gstin": gstin, "notes": notes,
+               "name_from_text": name_from_text}
+        if r.get("website") and not domain:
+            notes.append(f"'{r['website']}' is not a usable website; treated as no website.")
         if r.get("rescreen_of"):
             out["rescreen_of"] = r["rescreen_of"]
             if not gstin:      # reuse the GSTIN found in the original check: no need to read the website again
@@ -188,6 +207,8 @@ class Pipeline:
         req = self.out("take_request")
         res = self.cd.identify(domain=req["domain"]) if req["domain"] else None
         by = "domain"
+        if res is not None and res.status == NOT_FOUND:
+            self.ev.absence("identify", f"Company Identify has no company record for the website {req['domain']}", res)
         if (res is None or res.status == NOT_FOUND) and req["name"]:
             res, by = self.cd.identify(name=req["name"]), "name"
         if res.status != FOUND:
@@ -197,6 +218,8 @@ class Pipeline:
                                          request_keys(req))
 
         matches = res.data[0]["matches"]
+        if not matches:
+            raise ValueError("Identify FOUND with no matches")
         cands = []
         for i, m in enumerate(matches):
             info = m["company_data"].get("basic_info", {}) or {}
@@ -254,8 +277,13 @@ class Pipeline:
             exact = bool(req["domain"]) and req["domain"] in top["all_domains"]
             close = [c for c in cands[1:]
                      if (top["confidence"] or 0) - (c["confidence"] or 0) < icfg["ambiguity_gap"]]
-            resolved = (top["confidence"] or 0) >= icfg["min_confidence"] and (exact or not close)
-            status = "RESOLVED" if resolved else "AMBIGUOUS"
+            if not exact and top["all_domains"]:
+                # Identify by website returned a firm whose record does not list that website (fuzzy
+                # match or redirect). Do not borrow its evidence: a person must look.
+                status = "AMBIGUOUS"
+            else:
+                resolved = (top["confidence"] or 0) >= icfg["min_confidence"] and (exact or not close)
+                status = "RESOLVED" if resolved else "AMBIGUOUS"
             candidates_shown = cands[:5]
         sim = top["name_similarity"]
         exact_domain = bool(req["domain"]) and req["domain"] in top["all_domains"]
@@ -323,7 +351,7 @@ class Pipeline:
         ident = self.out("identify")
         if ident.get("status") not in ("RESOLVED", "AMBIGUOUS"):
             return {"status": "SKIPPED", "reason": "company not identified"}
-        if ident.get("status") == "AMBIGUOUS" and ident.get("by") == "name":
+        if ident.get("status") == "AMBIGUOUS" and (ident.get("by") == "name" or not ident.get("exact_domain")):
             # Seen live: "RK Enterprises" by name matches 10+ different firms on different websites.
             # We do not know which one is meant, so do not pay to profile a guess; a person picks.
             return {"status": "SKIPPED", "reason": "several different firms carry this name; a person must pick one"}
@@ -504,9 +532,10 @@ class Pipeline:
                 rec = res.data.get("data") if prefix else res.data
                 reg_date = rec.get("date_of_registration")
                 g = lambda claim, key: self.ev.field("registry", claim, res, prefix + key, record_date=reg_date)
+                valid = g(f"GST registry: is {gstin} a valid registration", "valid") if "valid" in rec else None
                 item.update(
                     registry="FOUND",
-                    valid=rec.get("valid"),
+                    valid=valid if valid is not None else rec.get("valid"),
                     status=g(f"GST registration status of {gstin}", "gst_in_status"),
                     legal_name=g(f"Legal name on GST registration {gstin}", "legal_name_of_business"),
                     trade_name=g(f"Trade name on GST registration {gstin}", "trade_name_of_business"),
@@ -558,7 +587,7 @@ class Pipeline:
         victim_markers = [marker.lower() for marker in mcfg.get("victim_context", [])]
         enr, ident, req = self.out("enrich") or {}, self.out("identify") or {}, self.out("take_request")
         if ident.get("status") not in ("RESOLVED", "AMBIGUOUS") or \
-                (ident.get("status") == "AMBIGUOUS" and ident.get("by") == "name"):
+                (ident.get("status") == "AMBIGUOUS" and (ident.get("by") == "name" or not ident.get("exact_domain"))):
             return {"status": "SKIPPED", "reason": "identity not resolved: news about the matched name "
                                                    "could be about a different firm"}
         company = enr.get("name") or (ident.get("top") or {}).get("name") or req.get("name")
@@ -606,10 +635,14 @@ class Pipeline:
                     findings.append(item)
                     continue
                 if kind == "company":
-                    # The headline itself names the vendor next to an adverse term: that is the link.
-                    # (Namesake clearing is for people; a person reviews company-name collisions.)
-                    self.ev.field("media", f"News headline naming {subject}", res, f"results[{ri}].title",
-                                  source_url=r.get("url"), record_date=published)
+                    # The headline or snippet names the vendor next to an adverse term: that is the link.
+                    # Cite the field that actually contains that sentence. (Namesake clearing is for
+                    # people; a person reviews company-name collisions.)
+                    in_title = any(sentence_names(kind, subject, s) and any(rx.search(s.lower()) for _, rx in term_patterns)
+                                   for s in re.split(r"(?<=[.!?])\s+|\n", r.get("title") or ""))
+                    field = "title" if in_title else "snippet"
+                    self.ev.field("media", f"News {field} naming {subject} with an adverse term", res,
+                                  f"results[{ri}].{field}", source_url=r.get("url"), record_date=published)
                     item.update(link="LINKED", why=f"the headline names {subject}")
                     findings.append(item)
                     continue
@@ -638,7 +671,9 @@ class Pipeline:
                                                         "article was not read (other language, redirect or paywall)")
                     findings.append(item)
                     continue
-                mentions_vendor = (core and core in names.core_name(text)) or (domain and domain in text.lower())
+                mentions_vendor = names.mentions_business(company, text) or \
+                    (bool(req.get("name")) and names.mentions_business(req["name"], text)) or \
+                    bool(domain and domain in text.lower())
                 passage = snippet_around(text, subject) or snippet_around(text, hit_terms[0])
                 if mentions_vendor:
                     item.update(link="LINKED", why=f"article names {subject} and the vendor ({company})")
@@ -675,12 +710,23 @@ class Pipeline:
                        (f"{self.job_id}:notify_approver", "compliance-approvers",
                         f"Vendor check {self.job_id}: {d['verdict']}. Recommended: {action}. {d['summary']}",
                         now_iso()))
-            db.execute("UPDATE jobs SET status='pending_approval', verdict=? WHERE id=?", (d["verdict"], self.job_id))
+            # Never reopen a job a person already closed (a kill after this commit, then a restart).
+            db.execute("UPDATE jobs SET status='pending_approval', verdict=? WHERE id=? AND status='running'",
+                       (d["verdict"], self.job_id))
+            result = {"recommended_action": action, "approval": "pending"}
+            self._finish_in_transaction(result)
             db.execute("COMMIT")
         except Exception:
             db.execute("ROLLBACK")
             raise
-        return {"recommended_action": action, "approval": "pending"}
+        return result
+
+    def _finish_in_transaction(self, result: dict) -> None:
+        """Save the hand-over output and mark the job done inside the caller's open transaction, so a kill
+        can never leave the approval written but the job still at stage hand_over."""
+        self.store.db.execute("INSERT OR REPLACE INTO stage_outputs (job_id, stage, output_json) VALUES (?,?,?)",
+                              (self.job_id, "hand_over", json.dumps(result)))
+        self.store.db.execute("UPDATE jobs SET stage='done', updated_at=? WHERE id=?", (time.time(), self.job_id))
 
     def _hand_over_rescreen(self, d: dict) -> dict:
         """Monitoring: an approved vendor that still looks real needs nothing. Anything else goes to a
@@ -692,6 +738,10 @@ class Pipeline:
             if d["verdict"] == "REAL_AND_TRADING":
                 db.execute("UPDATE jobs SET status='closed', verdict=? WHERE id=?", (d["verdict"], self.job_id))
                 outcome = {"monitoring": "no change", "approval": "not needed"}
+            elif d["verdict"] == "CANNOT_VERIFY":
+                # A source did not answer this time: not an alert about the vendor. Logged; retry next run.
+                db.execute("UPDATE jobs SET status='closed', verdict=? WHERE id=?", (d["verdict"], self.job_id))
+                outcome = {"monitoring": "incomplete: a source did not answer; retry", "approval": "not needed"}
             else:
                 db.execute("INSERT OR IGNORE INTO approvals (job_id, recommended_action, reason, status) "
                            "VALUES (?, 'manual_review', ?, 'pending')", (self.job_id, d["summary"]))
@@ -699,9 +749,10 @@ class Pipeline:
                            (f"{self.job_id}:monitoring_alert", "compliance-approvers",
                             f"Monitoring alert for an approved vendor (first checked in {original}): now "
                             f"{d['verdict']}. {d['summary']}", now_iso()))
-                db.execute("UPDATE jobs SET status='pending_approval', verdict=? WHERE id=?",
+                db.execute("UPDATE jobs SET status='pending_approval', verdict=? WHERE id=? AND status='running'",
                            (d["verdict"], self.job_id))
                 outcome = {"monitoring": "changed", "approval": "pending", "recommended_action": "manual_review"}
+            self._finish_in_transaction(outcome)
             db.execute("COMMIT")
         except Exception:
             db.execute("ROLLBACK")

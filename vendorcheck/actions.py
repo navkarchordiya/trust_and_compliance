@@ -6,6 +6,7 @@ mid-way, nothing is written and the approval can simply be repeated; if it alrea
 committed, repeating it is a no-op.
 """
 import json
+import time
 
 from .store import Store, now_iso
 
@@ -26,9 +27,22 @@ def decide_approval(store: Store, job_id: str, by: str, action: str | None = Non
         return f"{job_id}: already {appr['status']} by {appr['decided_by']} ({appr['decided_action']}); nothing done again."
 
     if decline:
-        store.db.execute("UPDATE approvals SET status='declined', decided_by=?, decided_at=?, override_reason=? "
-                         "WHERE job_id=?", (by, now_iso(), reason, job_id))
-        store.update_job(job_id, status="closed")
+        db = store.db
+        db.execute("BEGIN IMMEDIATE")
+        try:
+            # The pending check is repeated inside the transaction, so two people (or two clicks)
+            # cannot both decide; decision and job status change together or not at all.
+            cur = db.execute("UPDATE approvals SET status='declined', decided_by=?, decided_at=?, override_reason=? "
+                             "WHERE job_id=? AND status='pending'", (by, now_iso(), reason, job_id))
+            if cur.rowcount != 1:
+                db.execute("ROLLBACK")
+                return f"{job_id}: already decided by someone else; nothing done again."
+            db.execute("UPDATE jobs SET status='closed', updated_at=? WHERE id=?", (time.time(), job_id))
+            db.execute("COMMIT")
+        except Exception:
+            db.execute("ROLLBACK")
+            raise
+        store.log_event(job_id, "declined", by=by, reason=reason)
         return f"{job_id}: declined by {by}. No action taken."
 
     action = action or appr["recommended_action"]
@@ -45,38 +59,43 @@ def decide_approval(store: Store, job_id: str, by: str, action: str | None = Non
     ident = store.stage_output(job_id, "identify") or {}
     req = store.stage_output(job_id, "take_request") or {}
     top = ident.get("top") or {}
-    key = f"{job_id}:{action}"
-    company_key = f"cd:{top['id']}" if top.get("id") else (req.get("domain") or req.get("name"))
+    # The register is keyed on THIS vendor. The matched company record is only this vendor when the
+    # identity was resolved; for a lookalike or an ambiguous name it is another firm, and rejecting
+    # the lookalike must never put the real firm on the register (independent review, 22 Nov).
+    resolved = ident.get("status") == "RESOLVED"
+    name = (top.get("name") if resolved else None) or req.get("name") or req.get("domain")
+    domain = req.get("domain") or (top.get("domain") if resolved else None)
+    company_key = f"cd:{top['id']}" if resolved and top.get("id") else (domain or req.get("name"))
+    key = f"{job_id}:decision"             # one decision per job, whichever action it is
 
     db = store.db
     db.execute("BEGIN IMMEDIATE")
     try:
-        if db.execute("SELECT 1 FROM actions WHERE idempotency_key=?", (key,)).fetchone():
+        cur = db.execute("UPDATE approvals SET status='approved', decided_by=?, decided_action=?, decided_at=?, "
+                         "override_reason=? WHERE job_id=? AND status='pending'",
+                         (by, action, now_iso(), reason if overriding else None, job_id))
+        if cur.rowcount != 1 or db.execute("SELECT 1 FROM actions WHERE idempotency_key=?", (key,)).fetchone():
             db.execute("ROLLBACK")
-            return f"{job_id}: {action} already done; skipped."
-        payload = {"company_key": company_key, "name": top.get("name") or req.get("name"),
-                   "domain": req.get("domain") or top.get("domain"), "verdict": job["verdict"], "approved_by": by}
+            return f"{job_id}: already decided; nothing done again."
+        payload = {"company_key": company_key, "name": name, "domain": domain, "verdict": job["verdict"],
+                   "approved_by": by, "override_reason": reason if overriding else None}
         db.execute("INSERT INTO actions (idempotency_key, job_id, action, payload_json, done_at) VALUES (?,?,?,?,?)",
                    (key, job_id, action, json.dumps(payload), now_iso()))
         decision = "approved" if action == "add_to_approved_vendors" else "rejected"
         from .names import core_name
-        register_keys = {company_key, payload["domain"]}
+        register_keys = {company_key, domain}
         if req.get("gstin"):
             register_keys.add(f"gstin:{req['gstin']}")
-        if core_name(payload["name"]):
-            register_keys.add(f"name:{core_name(payload['name'])}")
-        payload["override_reason"] = reason if overriding else None
+        if core_name(req.get("name") or name):
+            register_keys.add(f"name:{core_name(req.get('name') or name)}")
         for register_key in register_keys - {None, ""}:
             db.execute("INSERT OR REPLACE INTO vendor_register (company_key, name, domain, decision, job_id, "
                        "decided_at) VALUES (?,?,?,?,?,?)",
-                       (register_key, payload["name"], payload["domain"], decision, job_id, now_iso()))
+                       (register_key, name, domain, decision, job_id, now_iso()))
         db.execute("INSERT OR IGNORE INTO outbox (idempotency_key, to_team, body, created_at) VALUES (?,?,?,?)",
                    (key + ":notify", "procurement-team",
-                    f"{payload['name']} ({payload['domain']}): {action} approved by {by}.", now_iso()))
-        db.execute("UPDATE approvals SET status='approved', decided_by=?, decided_action=?, decided_at=?, "
-                   "override_reason=? WHERE job_id=?",
-                   (by, action, now_iso(), reason if overriding else None, job_id))
-        db.execute("UPDATE jobs SET status='closed' WHERE id=?", (job_id,))
+                    f"{name} ({domain or 'no website'}): {action} approved by {by}.", now_iso()))
+        db.execute("UPDATE jobs SET status='closed', updated_at=? WHERE id=?", (time.time(), job_id))
         db.execute("COMMIT")
     except Exception:
         db.execute("ROLLBACK")

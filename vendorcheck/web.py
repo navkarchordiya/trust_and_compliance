@@ -10,7 +10,9 @@
 On start, unfinished checks are resumed, so killing the server and starting it again carries on
 where it stopped. Standard library only; listens on 127.0.0.1 (this machine) by default.
 """
+import hmac
 import json
+import secrets
 import threading
 import traceback
 from html import escape
@@ -51,6 +53,10 @@ def run_in_background(db_path: str, cfg: dict, job_id: str) -> None:
 
 
 def make_handler(db_path: str, cfg: dict):
+    # A secret per server process, put into every form. A POST without it (e.g. a form on another web
+    # page the reviewer happens to open) is refused, so nothing irreversible can be triggered from outside.
+    csrf_token = secrets.token_urlsafe(24)
+
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *args):          # keep the terminal quiet; the event log has the detail
             pass
@@ -82,8 +88,15 @@ def make_handler(db_path: str, cfg: dict):
             data = parse_qs(self.rfile.read(length).decode("utf-8"))
             return {k: v[0].strip() for k, v in data.items()}
 
+        def host_allowed(self) -> bool:
+            """Only answer requests addressed to this machine (blocks DNS-rebinding reads)."""
+            host = (self.headers.get("host") or "").split(":")[0].strip("[]").lower()
+            return host in {"127.0.0.1", "localhost", "::1"} | set(cfg.get("web", {}).get("allowed_hosts", []))
+
         # ------------------------------------------------------------------ routes
         def do_GET(self):
+            if not self.host_allowed():
+                return self.send_html(page("Refused", "<p>Unknown host.</p>"), 403)
             url = urlparse(self.path)
             parts = [p for p in url.path.split("/") if p]
             store = Store(db_path)
@@ -97,7 +110,7 @@ def make_handler(db_path: str, cfg: dict):
                     result = build_result(store, cfg, job_id)
                     if parts[1].endswith(".json"):
                         return self.send_json(result)
-                    return self.send_html(render_job(result, live_links=True))
+                    return self.send_html(render_job(result, live_links=True, csrf=csrf_token))
                 if parts[0] == "call" and len(parts) == 2:
                     return self.send_html(self.raw_call(store, int(parts[1]), parse_qs(url.query)))
                 if parts[0] == "ledger" and len(parts) == 2:
@@ -112,6 +125,13 @@ def make_handler(db_path: str, cfg: dict):
 
         def do_POST(self):
             parts = [p for p in urlparse(self.path).path.split("/") if p]
+            if not self.host_allowed():
+                return self.send_html(page("Refused", "<p>Unknown host.</p>"), 403)
+            posted = self.form()
+            if not hmac.compare_digest(posted.get("csrf", ""), csrf_token):
+                return self.send_html(page("Refused", "<p>This form did not come from this app; nothing was "
+                                                      "done. Reload the page and try again.</p>"), 403)
+            self.form = lambda: posted                      # the body was read once; later calls reuse it
             store = Store(db_path)
             try:
                 if parts == ["check"]:
@@ -134,7 +154,7 @@ def make_handler(db_path: str, cfg: dict):
                         message = decide_approval(store, job_id, f["by"], f.get("action"), reason=f.get("reason"),
                                                   approvers=cfg.get("approvals", {}).get("approvers"))
                     save_result(store, cfg, job_id)
-                    return self.send_html(render_job(build_result(store, cfg, job_id), True, message))
+                    return self.send_html(render_job(build_result(store, cfg, job_id), True, message, csrf_token))
                 return self.send_html(page("Not found", "<p>Not found.</p>"), 404)
             finally:
                 store.db.close()
@@ -158,6 +178,7 @@ def make_handler(db_path: str, cfg: dict):
                 "<p class='muted'>No checks yet.</p>"
             body = ("<div class='card'><h1>New vendor check</h1>"
                     "<form class='inline' method='post' action='/check'>"
+                    f"<input type='hidden' name='csrf' value='{csrf_token}'>"
                     "<input name='name' placeholder='Vendor name' size='28'>"
                     "<input name='website' placeholder='Website, e.g. acmefreight.in' size='26'>"
                     "<input name='gstin' placeholder='GSTIN (optional)' size='18'>"

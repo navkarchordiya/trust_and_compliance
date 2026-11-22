@@ -20,6 +20,7 @@ from .store import Store, now_iso
 
 FOUND, NOT_FOUND, UNAVAILABLE, ERROR, SKIPPED_BUDGET = (
     "FOUND", "NOT_FOUND", "UNAVAILABLE", "ERROR", "SKIPPED_BUDGET")
+IN_FLIGHT, INTERRUPTED = "IN_FLIGHT", "INTERRUPTED"
 
 
 @dataclass
@@ -81,6 +82,16 @@ class SourceClient:
         key = hashlib.sha256(req_json.encode()).hexdigest()[:24]
 
         cached = self.store.cached_call(self.job_id, key)
+        if cached and cached["status"] not in (FOUND, NOT_FOUND):
+            # An earlier attempt failed or was interrupted (the process was killed while the request was
+            # in flight). Keep it in the ledger as its own row, then try again.
+            if cached["status"] == IN_FLIGHT:
+                self.store.db.execute("UPDATE calls SET status=?, error=? WHERE id=?",
+                                      (INTERRUPTED, "process stopped while the request was in flight; "
+                                       "cost counted as estimated, outcome unknown", cached["id"]))
+            self.store.db.execute("UPDATE calls SET request_key=? WHERE id=?",
+                                  (f"{key}:attempt:{cached['id']}", cached["id"]))
+            cached = None
         if cached and cached["status"] in (FOUND, NOT_FOUND):
             self.store.log_event(self.job_id, "call_cached", endpoint=endpoint, status=cached["status"],
                                  note="answered from this job's stored response; not paid again")
@@ -96,11 +107,20 @@ class SourceClient:
             return Result(SKIPPED_BUDGET, None, cid, url, now_iso(), reason)
 
         body = json.dumps(payload).encode() if payload is not None else None
+        # Written BEFORE the request leaves: if the process is killed mid-request, the ledger still shows
+        # the (estimated) cost of a call that may have been paid.
+        in_flight_id = self.store.record_call(
+            job_id=self.job_id, source=source, endpoint=endpoint, request_key=key, request_json=req_json,
+            status=IN_FLIGHT, error="", credits=estimate, credits_source="in_flight_estimate", attempts=0,
+            retrieved_at=now_iso())
         attempts, status, http_status, text, error, credits = 0, UNAVAILABLE, None, None, "", 0.0
         credits_source = "none"
         t0 = time.time()
         max_attempts = 1 + int(self.limits["max_retries"])
         while attempts < max_attempts:
+            if attempts and time.time() - self.run_started > self.limits["max_seconds_per_run"]:
+                error = (error + "; " if error else "") + "time limit reached during retries"
+                break                                   # stays UNAVAILABLE: "cannot verify", never an answer
             attempts += 1
             try:
                 http_status, rh, text = self.transport(method, url, headers or {}, body,
@@ -141,10 +161,11 @@ class SourceClient:
                     try:
                         if not_found(json.loads(text)):
                             status = NOT_FOUND
-                    except (ValueError, TypeError):
-                        pass
+                    except Exception as e:      # an unexpected shape is recorded, never a crash
+                        status, error = ERROR, f"unexpected response format: {type(e).__name__}: {e}"
             break
 
+        self.store.db.execute("DELETE FROM calls WHERE id=?", (in_flight_id,))   # replaced by the outcome below
         cid = self.store.record_call(
             job_id=self.job_id, source=source, endpoint=endpoint, request_key=key, request_json=req_json,
             status=status, http_status=http_status, response_text=text if status in (FOUND, NOT_FOUND) else text,

@@ -73,10 +73,11 @@ class TestLookalike(Base):
         job, r = self.run_job(fake, {"name": "Acme Global Freight Logistics Solutions"})
         self.assertEqual(r["verdict"], "CANNOT_VERIFY", r)
 
-    def test_name_only_exact_match_resolves(self):
+    def test_name_only_exact_match_is_never_auto_approved(self):
         fake = Fake2(company(), known_domains={"acmefreight.in"})
         job, r = self.run_job(fake, {"name": "Acme Freight Private Limited"})
-        self.assertEqual(r["verdict"], "REAL_AND_TRADING", r)
+        self.assertEqual(r["verdict"], "HOLD_FOR_REVIEW", r)
+        self.assertTrue(any("confirm the vendor's website" in x for x in r["looks_off"]["needs_review"]))
 
 
 class TestAdverseMatching(Base):

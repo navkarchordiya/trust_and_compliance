@@ -105,6 +105,15 @@ What we tried, what works, and what comes next. (The guide: "They are the heart 
     and the check continues; a name match only counts as a duplicate when nothing else tells them apart.
   - A website with no DNS record is reported (weak signal).
 
+- 13:45 Independent code review (a fresh reviewer with no context) found 15 defects, 6 of which could give a
+  wrong verdict; all fixed with regression tests (`tests/test_review_fixes.py`, 57 tests):
+  rejecting a lookalike wrote the real firm into the register; crime words ("cyber fraud") were treated as
+  victim markers; a leader's article naming the short brand was cleared; name-only and "record does not list
+  this website" identities could be approved; "real and trading" needed only a confirmed leader; "N/A" or free
+  text produced lookalike accusations; odd response shapes crashed a stage forever; a call killed in flight was
+  not in the ledger; two racing approvals both acted; a kill after hand-over could leave a job open; decline
+  was not atomic; some flags had no cited field; the review app had no CSRF/Host check.
+
 ## Declared before 10:15
 
 TODO before submitting: list anything written before 10:15 (code, prompts, notes), or write "Nothing".

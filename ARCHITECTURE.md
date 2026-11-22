@@ -50,12 +50,12 @@ flowchart TD
 | Data calls | `vendorcheck/crustdata.py`, `SourceClient.call` | All calls go through one wrapper |
 | Retries | `SourceClient.call` | Timeouts, 5xx and 429 retried with backoff (429 waits for `X-RateLimit-Reset`) |
 | Silence ≠ answer | `SourceClient.call` → `rules.py` | `UNAVAILABLE` / `ERROR` become *cannot verify*, never a red flag |
-| Cost ledger | `calls` table | `x-credits-used` header per call; `python -m vendorcheck ledger JOB` |
+| Cost ledger | `calls` table (a row is written IN_FLIGHT before each request; a kill leaves it INTERRUPTED with its estimated cost) | `x-credits-used` header per call; `python -m vendorcheck ledger JOB` |
 | Limits | `SourceClient._over_budget` | Calls past the credit/time limit are skipped and reported |
 | Evidence | `vendorcheck/evidence.py` | API facts = JSON path into the stored response; web facts = a passage that must appear verbatim in the fetched page |
 | Resume after kill | `Pipeline.run`, `Store.save_stage` | Stage output + stage advance in one transaction; completed calls are cached per job |
 | Approvals | `approvals` table, `actions.py` | Clearing and rejecting both wait for a person |
-| Exactly once | `actions` table (idempotency key) | Approval, action, register entry and notification commit together |
+| Exactly once | `actions` table (idempotency key `JOB:decision`; the pending check is repeated inside the transaction) | Approval, action, register entry and notification commit together |
 | Rules and output fields | `config.toml` | Thresholds, limits and output fields change without code changes |
 | Logs | `data/logs/JOB.jsonl` (`Store.log_event`) | Every stage start/finish, call (status, attempts, credits), cached replay and action |
 | Client vendor list | `vendor_register` (`import-vendors`) | Keyed by Crustdata ID, website, `gstin:`, `name:`; duplicates are held before paying for the rest |
@@ -66,7 +66,7 @@ flowchart TD
 ## Exactly once: the outbox pattern
 
 An approval writes four rows in ONE SQLite transaction: the approval decision, the action row
-(primary key = idempotency key `JOB:action`), the vendor-register entry and the outbox message.
+(primary key = idempotency key `JOB:decision`, one decision per job), the vendor-register entry and the outbox message.
 Either all four commit or none do. A kill before COMMIT leaves nothing, so the person can approve
 again; a kill after COMMIT makes a repeat approval a no-op ("already done"). Sending a message
 outside the database (email, Slack) would be a separate worker reading the outbox and marking each

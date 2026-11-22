@@ -56,12 +56,12 @@ adverse_terms = ["jail", "sentenced", "fir", "eow", "cbi", "probe", "contempt", 
 # Articles where the vendor is the victim or is being impersonated are not adverse news about it.
 # Seen live (22 Nov): most "Blue Dart" fraud news is scams run IN ITS NAME ("using fake Blue Dart courier
 # identity", "fraud in the name of courier company Blue Dart"), often in Hindi.
-victim_context = ["impersonat", "posing as", "in the name of", "beware", "fake website", "fake job",
-                  "fake agent", "fake courier", "fake delivery", "fake customer care", "fake helpline",
-                  "fraudsters", "scammers", "cyber criminals", "cyber fraud", "cyber thugs", "duped by fake",
-                  "cheated by fake", "pretending to be", "parcel scam", "parcel fraud", "delivery scam",
-                  "delivery fraud", "courier scam", "courier fraud", "phishing",
-                  "के नाम पर", "फर्जी एजेंट", "साइबर ठग", "साइबर फ्रॉड"]
+victim_context = ["impersonat", "posing as", "in the name of", "pretending to be", "beware of fake",
+                  "fake agent", "fake customer care", "fake helpline", "duped by fake", "cheated by fake",
+                  "के नाम पर", "फर्जी एजेंट"]
+# Only phrases that mean "someone pretended to be the vendor". Crime words ("cyber fraud", "phishing",
+# "fraudsters") are NOT here: an article can use them about the vendor itself (independent review, 22 Nov).
+# The pattern "fake <vendor name>" (e.g. "using fake Blue Dart courier identity") is matched in code.
 # Non-English adverse words (matched as text, since Devanagari has no reliable word boundary).
 adverse_terms_hi = ["गिरफ्तार", "धोखाधड़ी", "घोटाला", "छापा", "छापेमारी", "फ्रॉड", "अरेस्ट", "मनी लॉन्ड्रिंग"]
 

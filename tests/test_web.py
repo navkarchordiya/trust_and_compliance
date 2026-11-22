@@ -1,10 +1,12 @@
 """The review app end to end over HTTP, with the fake sources (mock data is for tests only)."""
 import functools
 import json
+import re
 import tempfile
 import threading
 import time
 import unittest
+import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
@@ -40,7 +42,12 @@ class TestReviewApp(unittest.TestCase):
         self.patch.stop()
         self.tmp.cleanup()
 
-    def post(self, path, fields):
+    def token(self):
+        return re.search(r"name='csrf' value='([^']+)'", self.get("/")).group(1)
+
+    def post(self, path, fields, with_token=True):
+        if with_token:
+            fields = {**fields, "csrf": self.token()}
         data = urllib.parse.urlencode(fields).encode()
         with urllib.request.urlopen(urllib.request.Request(self.base + path, data=data)) as response:
             return response.geturl(), response.read().decode()
@@ -48,6 +55,12 @@ class TestReviewApp(unittest.TestCase):
     def get(self, path):
         with urllib.request.urlopen(self.base + path) as response:
             return response.read().decode()
+
+    def test_post_from_another_page_is_refused(self):
+        with self.assertRaises(urllib.error.HTTPError) as refused:
+            self.post("/check", {"name": "Acme Freight", "website": "acmefreight.in"}, with_token=False)
+        self.assertEqual(refused.exception.code, 403)
+        self.assertEqual(Store(self.db).db.execute("SELECT COUNT(*) c FROM jobs").fetchone()["c"], 0)
 
     def test_check_review_and_approve_once(self):
         final_url, _ = self.post("/check", {"name": "Acme Freight Pvt Ltd", "website": "acmefreight.in"})
@@ -73,7 +86,8 @@ class TestReviewApp(unittest.TestCase):
         store = Store(self.db)
         self.assertEqual(store.db.execute("SELECT COUNT(*) c FROM actions").fetchone()["c"], 1)
 
-        call_page = self.get("/call/1?path=" + urllib.parse.quote("[0].matches[0].company_data.basic_info.name"))
+        first_fact = next(f for f in result["facts"] if f["field_or_passage"].endswith("basic_info.name"))
+        call_page = self.get(f"/call/{first_fact['call_id']}?path=" + urllib.parse.quote(first_fact["field_or_passage"]))
         self.assertIn("Acme Freight Private Limited", call_page)
         self.assertIn("Cost ledger", self.get(f"/ledger/{job_id}"))
         self.assertIn("Measured cost", self.get("/"))

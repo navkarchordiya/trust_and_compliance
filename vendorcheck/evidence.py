@@ -74,6 +74,13 @@ class Evidence:
                             retrieved_at=res.retrieved_at, call_id=res.call_id, record_date=record_date)
         return value
 
+    def absence(self, stage: str, claim: str, res: Result, path: str = "[0].matches") -> None:
+        """Record that a source answered "no record" (an empty list at `path`), so a claim built on
+        that answer cites it like any other fact."""
+        self.store.add_fact(job_id=self.job_id, stage=stage, claim=claim, value_json=json.dumps([]),
+                            source_url=res.url, locator=path, quote="[] (no record)",
+                            retrieved_at=res.retrieved_at, call_id=res.call_id, record_date=None)
+
     def passage(self, stage: str, claim: str, value, res: Result, page_text: str, passage: str,
                 source_url: str, record_date: str | None = None) -> bool:
         """Record a fact backed by a passage. Refuses if the passage is not verbatim in the page."""

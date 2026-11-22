@@ -36,6 +36,12 @@ def decide(cfg: dict, o: dict) -> dict:
     elif status == "NOT_FOUND":
         cannot.append(f"Company identity: no company record found for "
                       f"{req.get('domain') or req.get('name')}.")
+    elif status == "AMBIGUOUS" and ident.get("by") == "domain" and not ident.get("exact_domain") \
+            and (ident.get("top") or {}).get("all_domains"):
+        top = ident.get("top") or {}
+        review.append(f"Identity unclear: the company record found for {req.get('domain')} is '{top.get('name')}', "
+                      f"whose record lists other websites ({', '.join(top.get('all_domains', [])[:3])}). Its records "
+                      "were NOT used for this vendor; a person must confirm who the vendor is.")
     elif status == "AMBIGUOUS":
         names_ = ", ".join(f"{c['name']} ({c['domain']})" for c in ident.get("candidates", [])[:3])
         review.append(f"Ambiguous identity: several records match closely ({names_}). A person must pick one.")
@@ -57,8 +63,13 @@ def decide(cfg: dict, o: dict) -> dict:
                           "Send the vendor's website.")
     sim = ident.get("name_similarity")
     if sim is not None and sim < cfg["identity"]["min_name_similarity"] and status == "RESOLVED":
-        strong.append(f"Name mismatch: the request says '{req.get('name')}' but the website belongs to "
-                      f"'{ident['top']['name']}' (similarity {sim}). Possible lookalike or impersonation.")
+        mismatch = (f"Name mismatch: the request says '{req.get('name')}' but the website belongs to "
+                    f"'{ident['top']['name']}' (similarity {sim}).")
+        if req.get("name_from_text"):
+            # The name was read out of free text by us; a parsing slip must not become an accusation.
+            weak.append(mismatch + " The name was read from the request's text: confirm it.")
+        else:
+            strong.append(mismatch + " Possible lookalike or impersonation.")
     if ident.get("similar_records"):
         weak.append("Identified by name only; other records with similar names exist: "
                     + ", ".join(ident["similar_records"][:3]) + ". Confirm the vendor's website.")
@@ -168,6 +179,7 @@ def decide(cfg: dict, o: dict) -> dict:
                                                     "valid", "status", "legal_name", "trade_name", "registered")})
 
     # ---- who runs it
+    operating = list(positive)        # evidence the firm trades; a confirmed leader alone is not that
     leaders = lead.get("leaders") or []
     confirmed = [l for l in leaders if l.get("confirmed")]
     refuted = [l for l in leaders if l.get("confirmed") is False]
@@ -196,6 +208,11 @@ def decide(cfg: dict, o: dict) -> dict:
     for s in failed:
         cannot.append(f"News search for {s['subject']} did not answer ({s['error'] or s['status']}).")
 
+    # ---- a source that answered in an unexpected format
+    stage_errors = [name for name, out in o.items() if isinstance(out, dict) and out.get("stage_error")]
+    for name in stage_errors:
+        cannot.append(f"{o[name].get('missing')}; this check could not be completed.")
+
     # ---- verdict
     n_front = cfg["verdict"]["strong_signals_for_front"]
     identity_ok = status == "RESOLVED"
@@ -205,8 +222,13 @@ def decide(cfg: dict, o: dict) -> dict:
         verdict = "HOLD_FOR_REVIEW"
     elif not identity_ok:
         verdict = "CANNOT_VERIFY"
-    elif confirmed and positive and len(weak) <= 1 and not unresolved and not failed:
+    elif confirmed and operating and len(weak) <= 1 and not unresolved and not failed and not stage_errors:
         verdict = "REAL_AND_TRADING"
+        if ident.get("by") == "name":
+            # Never approve on a name alone: a close name can belong to a different firm.
+            verdict = "HOLD_FOR_REVIEW"
+            review.append("Identified by name only (no website matched): the evidence looks good, but a person "
+                          "must confirm the vendor's website before approving.")
     else:
         verdict = "CANNOT_VERIFY" if cannot else "HOLD_FOR_REVIEW"
 

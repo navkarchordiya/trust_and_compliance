@@ -37,30 +37,63 @@ def similarity(a: str | None, b: str | None) -> float:
     return round(SequenceMatcher(None, a, b).ratio(), 3)
 
 
+EMPTY_VALUES = {"", "-", "--", "n/a", "na", "none", "null", "nil", "not available", "nan"}
+LABEL_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$")
+# Words that look like domains in free text but are not websites ("Pvt.Ltd", "Pune.Website").
+NOT_A_TLD = {"ltd", "pvt", "inc", "co", "website", "site", "llp", "corp"}
+
+
 def domain_of(website: str | None) -> str | None:
-    if not website:
+    """Normalised domain of a website value, or None when it is not a usable website
+    (seen in CSV input: "N/A", "-", a bare word, a trailing dot)."""
+    if not website or website.strip().lower() in EMPTY_VALUES:
         return None
     w = website.strip()
     if "://" not in w:
         w = "http://" + w
-    host = (urlparse(w).hostname or "").lower()
-    return host[4:] if host.startswith("www.") else host or None
+    try:
+        host = (urlparse(w).hostname or "").lower().rstrip(".")
+    except ValueError:
+        return None
+    if host.startswith("www."):
+        host = host[4:]
+    labels = host.split(".")
+    if len(labels) < 2 or not all(LABEL_RE.match(label) for label in labels) or not labels[-1].isalpha():
+        return None
+    return host
 
 
 URL_RE = re.compile(r"(https?://[^\s,;]+|\b(?:www\.)?[a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,}\b)", re.I)
+WEBSITE_HINT = re.compile(r"(?:website|site|web|url|domain)\s*(?:is|:|-)?\s*(\S+)", re.I)
+
+
+def _looks_like_website(token: str) -> bool:
+    domain = domain_of(token.rstrip(".,;)"))
+    return bool(domain) and domain.split(".")[-1] not in NOT_A_TLD and \
+        not any(label in NOT_A_TLD and len(domain.split(".")) == 2 for label in domain.split(".")[:1])
 
 
 def parse_free_text(text: str) -> dict:
-    """Best-effort: pull a website and a name out of a request written in plain words."""
-    m = URL_RE.search(text or "")
-    website = m.group(0) if m else None
-    name = None
-    q = re.search(r"[\"“']([^\"”']{2,80})[\"”']", text or "")
-    if q:
-        name = q.group(1)
+    """Best-effort: pull a website and a name out of a request written in plain words.
+    Prefers a website named as such ("website acme.in"), then an http/www link, then the last
+    domain-like token; never a company suffix like "Pvt.Ltd" or "Pune.Website"."""
+    text = text or ""
+    website = None
+    hinted = WEBSITE_HINT.search(text)
+    if hinted and _looks_like_website(hinted.group(1)):
+        website = hinted.group(1).rstrip(".,;)")
     else:
-        n = re.search(r"(?:vendor|company|name)\s*(?:is|:)\s*([A-Z][\w&.\- ]{1,80}?)(?:[,.;]|\s+(?:and|with|website)\b|$)",
-                      text or "")
+        candidates = [m.group(0) for m in URL_RE.finditer(text) if _looks_like_website(m.group(0))]
+        linked = [c for c in candidates if c.lower().startswith(("http", "www."))]
+        website = (linked or candidates or [None])[-1]
+    name = None
+    # A quoted name: the quote must not sit inside a word ("vendor's" is not a quote).
+    q = re.search(r"(?<!\w)[\"“'‘]([^\"”'’]{2,80})[\"”'’](?!\w)", text)
+    if q:
+        name = q.group(1).strip()
+    else:
+        n = re.search(r"(?i:vendor|company|name)\s*(?:is|:)\s*([A-Z][\w&.\- ]{1,80}?)(?:[,;]|\.\s|\s+(?:and|with|website)\b|$)",
+                      text)
         if n:
             name = n.group(1).strip()
     return {"name": name, "website": website}

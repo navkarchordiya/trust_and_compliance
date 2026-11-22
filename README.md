@@ -49,7 +49,8 @@ verified, every fact with its source, and the cost of the run.
 - Every claim has a source; no fact comes from model memory.
 - A source that times out is never read as "does not exist": it becomes *cannot verify*.
 - Clearing **and rejecting** a vendor both wait for a person's approval, and happen exactly once.
-- A run killed at any moment resumes where it stopped without paying twice for a call.
+- A run killed at any moment resumes where it stopped. A completed call is never paid again; a call killed
+  while in flight stays in the ledger as `INTERRUPTED` with its estimated cost, so the cost record is honest.
 - Each run stays inside its credit and time limit (`config.toml`).
 
 ## Data sources
@@ -93,11 +94,12 @@ person can reject the vendor, which updates the register.
 | Case | What the service does | Test |
 |---|---|---|
 | Lookalike name: real firm's name, different website | Identify by the website finds nothing, by name finds the real firm on another domain: **strong red flag "Lookalike"**, and the real firm's records are never used for this vendor | `TestLookalike`, `TestRealIdentifyByName` |
-| Name only, close but not exact | Not resolved: **cannot verify**, asks for the website. Identify-by-name pads its answer with unrelated firms (seen live), so candidates are ranked by name match | `test_name_only_partial_match_cannot_verify` |
+| Name only (no website) | Never auto-approved: at best **hold**, "confirm the vendor's website"; close-but-different names are **cannot verify**. Identify-by-name pads its answer with unrelated firms (seen live), so candidates are ranked by name match | `test_name_only_partial_match_cannot_verify` |
 | Unknown vendor | **Cannot verify**, never accused | `test_unknown_vendor_is_not_accused` |
 | Duplicate | Same website or Crustdata ID already in the vendor register or an open job: **held**, rest of the check skipped (saves credits) | `test_duplicate_vendor_is_held`, batch test |
 | Source timeout / budget | **Cannot verify** with the reason; never a red flag | `test_timeout_is_cannot_verify_not_front` |
-| Namesake in the news | Cleared (marked *weak*: based on absence) unless the article also names the vendor | `test_namesake_is_cleared` |
+| Namesake in the news | Cleared (marked *weak*: based on absence) unless the article names the vendor (brand name, legal name or website) |
+| Malformed input ("N/A" website, free text) | A bad website is "no website"; a name read from free text never becomes an accusation | `test_namesake_is_cleared` |
 | Vendor is the victim ("fraudsters posing as …") | Not adverse | `test_vendor_as_victim_is_not_adverse` |
 | Fake or cancelled GSTIN | Check-digit failure or non-active registry status: **strong red flag** | `TestRegistry` |
 
@@ -122,7 +124,8 @@ python -m vendorcheck decline JOB --by "Your Name"
 ```
 
 Agents stay in the room: notifications go to an internal `outbox` table for the team, never to
-the vendor or anyone outside.
+the vendor or anyone outside. Only people in `[approvals] approvers` may decide (when set); two people
+deciding at once cannot both act; the review app refuses forms that did not come from itself.
 
 ## Ethics: personal data, approvals, explanations
 

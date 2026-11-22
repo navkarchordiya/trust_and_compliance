@@ -107,7 +107,7 @@ def main(argv=None):
         pipe.run(job_id)
         show(job_id, args.json)
     elif args.cmd == "resume":
-        jobs = [j for j in store.jobs("running") if j["stage"] != "done"]
+        jobs = [j for j in store.jobs() if j["stage"] != "done"]      # whatever their status
         if not jobs:
             print("nothing to resume", file=sys.stderr)
         for j in jobs:

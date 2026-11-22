@@ -54,7 +54,13 @@ def run_batch(store: Store, cfg: dict, pipe: Pipeline, path: str, log=print) -> 
         job_id = new_job(store, request, job_id=f"{bid}_{i:03d}")
         if store.job(job_id)["stage"] != "done":
             log(f"row {i}: {job_id} {request}")
-            pipe.run(job_id)
+            try:
+                pipe.run(job_id)
+            except Exception as e:             # one bad row must not stop the batch; it stays resumable
+                store.log_event(job_id, "error", detail=f"{type(e).__name__}: {e}")
+                log(f"row {i}: {job_id} failed ({type(e).__name__}: {e}); re-run the batch to resume it")
+                out.append((row, {"job_id": job_id, "verdict": None, "error": f"{type(e).__name__}: {e}"}))
+                continue
         save_result(store, cfg, job_id)
         out.append((row, build_result(store, cfg, job_id)))
     from .config import ROOT
