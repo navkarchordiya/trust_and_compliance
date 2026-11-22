@@ -1,4 +1,5 @@
 import re
+from datetime import datetime
 from difflib import SequenceMatcher
 from urllib.parse import urlparse
 
@@ -261,7 +262,7 @@ def decode_cin(cin: str | None) -> dict | None:
     if not m:
         return None
     listed, nic, state, year, kind, number = m.groups()
-    if state not in CIN_STATES or kind not in CIN_TYPES or not 1850 <= int(year) <= 2100:
+    if state not in CIN_STATES or kind not in CIN_TYPES or not 1850 <= int(year) <= datetime.now().year:
         return None
     return {"cin": m.group(0), "listed": listed == "L", "industry_code": nic, "state": CIN_STATES[state],
             "year_incorporated": int(year), "company_type": CIN_TYPES[kind], "type_code": kind}

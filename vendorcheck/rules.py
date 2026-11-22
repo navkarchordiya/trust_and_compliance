@@ -116,6 +116,9 @@ def decide(cfg: dict, o: dict) -> dict:
                 strong.append(f"Age mismatch: the record says founded {year}, but its domain was only "
                               f"registered on {dom['registered'][:10]}.")
     org = dom.get("registrant_org")
+    privacy = [m.lower() for m in cfg.get("domain", {}).get("privacy_markers", [])]
+    if org and any(m in org.lower() for m in privacy):
+        org = None                       # a privacy service or a redacted field says nothing about the owner
     vendor_names = [n for n in (req.get("name"), enr.get("name"), (ident.get("top") or {}).get("name")) if n]
     if org and vendor_names:
         if any(names.names_match(n, org, cfg["identity"]["min_name_similarity"]) or names.carries_brand(org, n)
@@ -152,7 +155,8 @@ def decide(cfg: dict, o: dict) -> dict:
     # ---- is it active NOW: the newest dated record (a job posting, a news article on the record)
     acfg = cfg.get("activity", {})
     act = o.get("activity") or {}
-    as_of = datetime.fromisoformat(acfg["as_of"]) if acfg.get("as_of") else datetime.now()
+    as_of = (datetime.fromisoformat(str(acfg["as_of"])).replace(tzinfo=None) if acfg.get("as_of")
+             else datetime.now())
     dated = [(p["date"], f"job posting '{p['title']}'") for p in act.get("postings") or [] if p.get("date")]
     # A news item on the company's record counts only if its title names the company. Seen live: the newest
     # item on Ecom Express's record is about Delhivery, which bought it.
@@ -166,7 +170,8 @@ def decide(cfg: dict, o: dict) -> dict:
         cannot.append(f"Hiring activity: Job Search did not answer ({act.get('error') or act['status']}).")
     if act.get("postings"):
         newest = act["postings"][0]
-        if (as_of - datetime.fromisoformat(newest["date"])).days <= acfg.get("recent_days", 180):
+        if re.fullmatch(r"\d{4}-\d{2}-\d{2}", newest.get("date") or "") and \
+                (as_of - datetime.fromisoformat(newest["date"])).days <= acfg.get("recent_days", 180):
             positive.append(f"Hiring: {act.get('total')} job listing{'s' if act.get('total') != 1 else ''} on "
                             f"record; latest '{newest['title']}', posted {newest['date']}.")
     if dated:
@@ -249,7 +254,8 @@ def decide(cfg: dict, o: dict) -> dict:
         if as_of.year - d["year_incorporated"] <= cfg["age"].get("young_company_years", 1):
             weak.append(f"Recently incorporated: CIN {d['cin']} ({where}) shows incorporation in "
                         f"{d['year_incorporated']}.")
-    if len({c["cin"] for c in cins}) > 1 and {c.get("from") for c in cins} == {"request", "website"}:
+    form_cin = next((c for c in cins if c.get("from") == "request"), None)
+    if form_cin and not form_cin.get("on_website") and any(c.get("on_website") for c in cins):
         review.append("The CIN on the vendor's form differs from the CIN on its website: "
                       + ", ".join(f"{c['cin']} ({c.get('from')})" for c in cins) + ". Confirm which entity you will pay.")
     company_pans = [g for g in reg.get("gstins") or [] if g.get("pan_holder_type")]
@@ -296,8 +302,13 @@ def decide(cfg: dict, o: dict) -> dict:
             if l.get("on_record_as"):
                 return f"on the company record as {l['on_record_as']}"
             return "not on the company record"
+        searched = any(x.get("status") in ("FOUND", "NOT_FOUND") for x in media.get("searches") or [])
         positive.append("Directors named by the vendor: " + ", ".join(f"{l['name']} ({where(l)})" for l in declared)
-                        + "; each was screened in the news.")
+                        + ("; each was screened in the news." if searched else
+                           "; the news screen did not run for them (see what could not be verified)."))
+        if not searched:
+            cannot.append("Directors named by the vendor were not screened in the news: "
+                          + (media.get("reason") or "the news search did not answer") + ".")
         unconfirmed = [l["name"] for l in declared if not l.get("confirmed") and not l.get("on_record_as")]
         if unconfirmed:
             cannot.append("Director role: " + ", ".join(unconfirmed) + " named on the vendor's form only; no source "
@@ -357,6 +368,9 @@ def decide(cfg: dict, o: dict) -> dict:
                                     **({"year_incorporated": cin_summary[0]["year_incorporated"],
                                         "cin": cin_summary[0]["cin"]} if cin_summary else {})},
         "latest_activity": latest_activity,
+        # Every source answered, but nothing dated is recent: for monitoring this is news, not a glitch.
+        "no_recent_activity": bool(acfg.get("require_recent_activity") and not recently_active
+                                   and act.get("status") not in UNANSWERED and enr.get("status") == "FOUND"),
         "is_trading": positive,
         "namesakes_cleared": [f"{f['subject']}: {f['title']} ({f['url']}) — {f['why']}"
                               for f in cleared + [f for f in media.get("findings", []) if f["link"] == "NOT_ADVERSE"]],

@@ -47,6 +47,9 @@ young_company_years = 1        # CIN shows incorporation this recently (years) =
 
 [domain]
 fallback_via_web_fetch = true  # RDAP down: read the same RDAP record through Crustdata Web Fetch (1 credit)
+# A registrant "organisation" that is a privacy service or a redaction says nothing about who owns the site.
+privacy_markers = ["privacy", "redacted", "proxy", "withheld", "whoisguard", "domains by proxy", "not disclosed",
+                   "data protected", "contact privacy", "perfect privacy"]
 
 [operating]
 min_headcount = 3              # fewer visible employees than this = weak signal

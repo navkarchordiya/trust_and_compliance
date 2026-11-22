@@ -499,11 +499,21 @@ class Pipeline:
                 date = get_path(res.data, date_path)
             except (KeyError, IndexError, TypeError):
                 date = None
-            if not date:
+            day = str(date or "")[:10]
+            try:
+                datetime.strptime(day, "%Y-%m-%d")         # only an ISO date counts; anything else is skipped
+            except ValueError:
                 continue
-            title = self.ev.field("activity", f"Job posted by the company on {str(date)[:10]}", res, title_path,
-                                  record_date=date)
-            postings.append({"title": title, "date": str(date)[:10], "url": url})
+            try:
+                title = get_path(res.data, title_path)
+            except (KeyError, IndexError, TypeError):
+                title = None
+            # The date is the fact the decision rests on, so the date field is what is cited.
+            cited = self.ev.field("activity", f"Date a job posting{f' ({title!r})' if title else ''} was added "
+                                  "for the company", res, date_path, record_date=str(date))
+            if not cited:
+                continue
+            postings.append({"title": title or "untitled posting", "date": day, "url": url})
         postings.sort(key=lambda p: p["date"], reverse=True)
         total = res.data.get("total_count")
         return {"status": "FOUND" if postings else "NOT_FOUND", "postings": postings,
@@ -519,45 +529,74 @@ class Pipeline:
         if not domain:
             return {"status": "SKIPPED", "reason": "no website to date"}
         res = rdap_domain(self.client, domain)
-        via = ""
+        via, fetched = "", None
         if res.status not in (FOUND, NOT_FOUND) and self.cfg.get("domain", {}).get("fallback_via_web_fetch", True):
             # A source fails: the same public RDAP record, read through Crustdata Web Fetch (1 credit).
             # Seen at the venue: rdap.org unreachable from one network while the fetch route worked.
-            res, via = self._rdap_via_web_fetch(domain) or (res, ""), " (read through Crustdata Web Fetch)"
+            fallback = self._rdap_via_web_fetch(domain)
+            if fallback:
+                res, fetched = fallback
+                via = " (read through Crustdata Web Fetch)"
+
+        def cite(claim: str, path: str, record_date=None):
+            """A field of the RDAP record. Read directly, cite the JSON field; read through Web Fetch, the
+            stored response is the fetched page, so cite the verbatim passage of it that holds the value."""
+            try:
+                value = get_path(res.data, path)
+            except (KeyError, IndexError, TypeError):
+                return None
+            if value in (None, ""):
+                return None
+            if not fetched:
+                return self.ev.field("domain_age", claim, res, path, record_date=record_date)
+            page, content = fetched
+            ok = self.ev.passage("domain_age", claim, value, page, content,
+                                 snippet_around(content, json.dumps(value)[1:-1] if isinstance(value, str) else str(value), 60),
+                                 res.url, record_date=record_date)
+            return value if ok else None
         if res.status == NOT_FOUND:
-            unregistered = isinstance(res.data, dict) and (res.data.get("errorCode") == 404 or "available for "
-                                                           "registration" in json.dumps(res.data.get("description")))
-            if unregistered:
-                self.ev.field("domain_age", f"Domain registry answer for {domain}{via}", res, "description[0]")
-            return {"status": NOT_FOUND, "domain": domain, "unregistered": bool(unregistered),
+            # "Not registered" only when the registry says so in words, and that sentence is cited.
+            desc = (res.data.get("description") or []) if isinstance(res.data, dict) else []
+            idx = next((i for i, d in enumerate(desc) if isinstance(d, str) and "available for registration" in d.lower()),
+                       None)
+            unregistered = idx is not None and bool(cite(f"Domain registry answer for {domain}{via}", f"description[{idx}]"))
+            return {"status": NOT_FOUND, "domain": domain, "unregistered": unregistered,
                     "missing": f"Domain registry (RDAP) has no record of {domain}"}
         if res.status != FOUND or not isinstance(res.data, dict):
             return {"status": res.status, "error": res.error, "missing": f"Domain registry (RDAP) for {domain}"}
         for i, e in enumerate(res.data.get("events") or []):
             if e.get("eventAction") == "registration":
-                date = self.ev.field("domain_age", f"Domain {domain} registration date{via}", res,
-                                     f"events[{i}].eventDate", record_date=e.get("eventDate"))
-                d = datetime.fromisoformat(date.replace("Z", "+00:00"))
+                date = cite(f"Domain {domain} registration date{via}", f"events[{i}].eventDate",
+                            record_date=e.get("eventDate"))
+                try:
+                    d = datetime.fromisoformat(str(date).replace("Z", "+00:00"))
+                except ValueError:
+                    return {"status": "ERROR", "missing": f"RDAP registration date for {domain} is not a date"}
+                if d.tzinfo is None:
+                    d = d.replace(tzinfo=timezone.utc)
                 out = {"status": "FOUND", "domain": domain, "registered": date,
                        "age_days": (datetime.now(timezone.utc) - d).days}
                 # Who the domain is registered to, when the registry shows it (.in records often name the
                 # registrant organisation; .com records are usually redacted). Seen live: ecomexpress.in is
                 # registered to "Delhivery Limited", which bought Ecom Express.
-                for j, ent in enumerate(res.data.get("entities") or []):
+                entities = res.data.get("entities")
+                for j, ent in enumerate(entities if isinstance(entities, list) else []):
                     if not isinstance(ent, dict) or "registrant" not in (ent.get("roles") or []):
                         continue
-                    card = (ent.get("vcardArray") or [None, []])[1] or []
+                    vcard = ent.get("vcardArray")
+                    card = vcard[1] if isinstance(vcard, list) and len(vcard) > 1 and isinstance(vcard[1], list) else []
                     for k, item in enumerate(card):
                         if isinstance(item, list) and len(item) >= 4 and item[0] == "org" and str(item[3]).strip():
-                            out["registrant_org"] = self.ev.field(
-                                "domain_age", f"Organisation the domain {domain} is registered to", res,
-                                f"entities[{j}].vcardArray[1][{k}][3]")
+                            org = cite(f"Organisation the domain {domain} is registered to{via}",
+                                       f"entities[{j}].vcardArray[1][{k}][3]")
+                            if org:
+                                out["registrant_org"] = org
                 return out
         return {"status": "NOT_FOUND", "missing": f"RDAP record for {domain} has no registration date"}
 
     def _rdap_via_web_fetch(self, domain: str):
-        """The RDAP record for a domain, read through Crustdata Web Fetch. Returns a Result whose data is
-        the RDAP JSON (so facts cite RDAP fields), or None if that route failed too."""
+        """The RDAP record for a domain, read through Crustdata Web Fetch. Returns (a Result whose data is the
+        RDAP JSON, (the fetch Result, the fetched text)), or None if that route failed too."""
         url = f"https://rdap.org/domain/{domain}"
         page = self.cd.web_fetch(url)
         entry = (page.data or [{}])[0] if isinstance(page.data, list) and page.data else {}
@@ -570,7 +609,7 @@ class Pipeline:
         if not isinstance(record, dict):
             return None
         status = NOT_FOUND if entry.get("http_status") == 404 or record.get("errorCode") == 404 else FOUND
-        return Result(status, record, page.call_id, url, page.retrieved_at)
+        return Result(status, record, page.call_id, url, page.retrieved_at), (page, entry["content"])
 
     # ------------------------------------------------------------------ 3. gather: registry (GST)
     def s_registry(self) -> dict:
@@ -582,13 +621,14 @@ class Pipeline:
                                        if ident.get("status") == "RESOLVED" else None)
         pages, gstins, origin = [], [], {}
         cins, cin_origin = ([req["cin"]], {req["cin"]: "request"}) if req.get("cin") else ([], {})
+        website_cins: list[str] = []
         if req.get("gstin"):
             gstins.append(req["gstin"])          # given on the vendor's onboarding form (a claim, like the website)
             origin[req["gstin"]] = "request"
         def with_cins(out: dict) -> dict:
             if cins:
-                out["cins"] = [{"cin": c, "from": cin_origin.get(c, "website"), "decoded": names.decode_cin(c)}
-                               for c in cins]
+                out["cins"] = [{"cin": c, "from": cin_origin.get(c, "website"), "decoded": names.decode_cin(c),
+                                "on_website": c in website_cins} for c in cins]
             return out
 
         if not domain and not gstins:
@@ -618,11 +658,12 @@ class Pipeline:
                 continue
             text = html_to_text(entry.get("content") or "")
             for cin in names.find_cins(text)[:2]:
+                website_cins.append(cin)
                 if cin not in cins:
                     cins.append(cin)
                     cin_origin[cin] = "website"
-                    self.ev.passage("registry", "Company registration number (CIN) shown on the vendor's own website",
-                                    cin, page, text, snippet_around(text, cin, 80), url)
+                self.ev.passage("registry", "Company registration number (CIN) shown on the vendor's own website",
+                                cin, page, text, snippet_around(text, cin, 80), url)
             for gstin in names.find_gstins(text):
                 if gstin in gstins:
                     continue
@@ -877,7 +918,7 @@ class Pipeline:
             if d["verdict"] == "REAL_AND_TRADING":
                 db.execute("UPDATE jobs SET status='closed', verdict=? WHERE id=?", (d["verdict"], self.job_id))
                 outcome = {"monitoring": "no change", "approval": "not needed"}
-            elif d["verdict"] == "CANNOT_VERIFY":
+            elif d["verdict"] == "CANNOT_VERIFY" and not d.get("no_recent_activity"):
                 # A source did not answer this time: not an alert about the vendor. Logged; retry next run.
                 db.execute("UPDATE jobs SET status='closed', verdict=? WHERE id=?", (d["verdict"], self.job_id))
                 outcome = {"monitoring": "incomplete: a source did not answer; retry", "approval": "not needed"}

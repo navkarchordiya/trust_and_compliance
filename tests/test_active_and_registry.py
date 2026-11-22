@@ -47,9 +47,10 @@ class TestActiveNow(Base):
         self.assertEqual(r["verdict"], "REAL_AND_TRADING", r)
         self.assertEqual(r["latest_activity"]["date"], "2026-11-15")
         self.assertTrue(any(x.startswith("Active now") for x in r["is_trading"]))
-        fact = next(f for f in r["facts"] if f["claim"].startswith("Job posted"))
-        self.assertEqual(fact["field_or_passage"], "job_listings[0].job_details.title")   # cited field
+        fact = next(f for f in r["facts"] if f["claim"].startswith("Date a job posting"))
+        self.assertEqual(fact["field_or_passage"], "job_listings[0].metadata.date_added")   # the date is cited
         self.assertEqual(fact["record_date"], "2026-11-15T10:00:00")
+        self.assertIn("Fleet Manager", fact["claim"])
 
     def test_nothing_recent_is_never_approved(self):
         # Headcount, an "active" flag and a confirmed founder, but the newest dated record is 2023:
@@ -155,7 +156,9 @@ class TestDomainRegistryFallback(Base):
         self.assertEqual(r["how_long_it_has_existed"]["domain_registered"], "2011-05-04T00:00:00Z")
         fact = next(f for f in r["facts"] if "registration date" in f["claim"])
         self.assertIn("Crustdata Web Fetch", fact["claim"])
-        self.assertEqual(fact["field_or_passage"], "events[0].eventDate")
+        # The stored response is the fetched page, so the fact is the verbatim passage that holds the date.
+        self.assertEqual(fact["field_or_passage"], "passage")
+        self.assertIn("2011-05-04T00:00:00Z", fact["quote"])
         self.assertEqual(r["verdict"], "REAL_AND_TRADING", r)
 
     def test_unregistered_domain_is_reported_once(self):
@@ -183,3 +186,56 @@ class TestPlainWordsExtras(Base):
     def test_free_text_parsers(self):
         self.assertEqual(names.directors_in_text("Directors are not known yet"), [])
         self.assertEqual(names.directors_in_text("promoter is Rakesh Kumar Gupta; website x.in"), ["Rakesh Kumar Gupta"])
+
+
+
+class TestReviewFixes2(Base):
+    """Defects found by the second independent review (all reproduced first)."""
+
+    def test_odd_posting_dates_are_skipped_not_fatal(self):
+        for bad in ("15/11/2026", 1763164800, "Nov 15, 2026", None):
+            fake = FakeJobs(company(), postings=[("Driver", bad)])
+            job, r = self.run_job(fake)
+            self.assertEqual(r["status"], "pending_approval", (bad, r["status"]))     # decided, not stuck
+            self.assertFalse((r["latest_activity"] or {}).get("what", "").startswith("job"), bad)
+
+    def test_both_rdap_routes_down_is_only_cannot_verify(self):
+        fake = FakeJobs(company(), postings=[("Fleet Manager", "2026-11-15T10:00:00")],
+                        timeout_on={"rdap", "/web/enrich/live"})
+        job, r = self.run_job(fake)
+        self.assertEqual(r["verdict"], "REAL_AND_TRADING", r["cannot_verify"])
+
+    def test_odd_vcard_keeps_the_domain_age(self):
+        class OddCard(FakeJobs):
+            def __call__(self, method, url, headers, body, timeout):
+                if "rdap" in url:
+                    return 200, {}, json.dumps({"events": [{"eventAction": "registration", "eventDate": self.reg_date}],
+                                                "entities": [{"roles": ["registrant"], "vcardArray": ["vcard"]}]})
+                return super().__call__(method, url, headers, body, timeout)
+        job, r = self.run_job(OddCard(company(), postings=[("Fleet Manager", "2026-11-15T10:00:00")]))
+        self.assertEqual(r["how_long_it_has_existed"]["domain_registered"], "2011-05-04T00:00:00Z")
+
+    def test_privacy_registrant_is_ignored(self):
+        fake = FakeJobs(company(), postings=[("Fleet Manager", "2026-11-15T10:00:00")],
+                        registrant="REDACTED FOR PRIVACY")
+        job, r = self.run_job(fake)
+        self.assertFalse(any("registered to" in x for x in r["looks_off"]["weak"]), r["looks_off"])
+
+    def test_form_cin_shown_on_website_is_not_a_mismatch(self):
+        page = "CIN U63090MH2011PTC123456 · Parent company CIN L63090MH1990PLC654321"
+        fake = FakeJobs(company(), postings=[("Fleet Manager", "2026-11-15T10:00:00")],
+                        pages={"https://www.acmefreight.in": page})
+        job, r = self.run_job(fake, {"name": "Acme Freight Pvt Ltd", "website": "acmefreight.in",
+                                     "cin": "U63090MH2011PTC123456"})
+        self.assertFalse(r["looks_off"]["needs_review"], r["looks_off"])
+
+    def test_future_cin_year_is_malformed(self):
+        self.assertIsNone(names.decode_cin("U63090MH2099PTC123456"))
+
+    def test_directors_not_claimed_screened_when_news_down(self):
+        fake = FakeJobs(company(), postings=[("Fleet Manager", "2026-11-15T10:00:00")], timeout_on={"/web/search/live"})
+        job, r = self.run_job(fake, {"name": "Acme Freight Pvt Ltd", "website": "acmefreight.in",
+                                     "directors": "Suresh Patil"})
+        line = next(x for x in r["is_trading"] if x.startswith("Directors named"))
+        self.assertNotIn("each was screened", line)
+        self.assertTrue(any("were not screened in the news" in x for x in r["cannot_verify"]), r["cannot_verify"])

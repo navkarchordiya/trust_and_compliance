@@ -157,6 +157,16 @@ What we tried, what works, and what comes next. (The guide: "They are the heart 
   Homepages of VRL, Om Logistics and Mahindra Logistics carry no CIN in their visible text, so the CIN is
   mostly expected from the vendor's form. Real-data outputs: `docs/real_tci_express.txt`, `docs/real_ecom_express.txt`.
 
+- 14:45 Second independent review of the new checks (fresh reviewer, every defect reproduced with a script
+  first): 11 found, all fixed, 7 regression tests (83 tests). Worst ones: a job-posting date in another format
+  crashed the decision and left the job stuck; when both RDAP routes failed, a code slip turned it into a stage
+  error that blocked every approval; a posting without a title approved a vendor with no cited fact (the
+  posting DATE is now the cited fact); facts read through the RDAP fallback pointed at a field that is not in
+  the stored response (now the verbatim passage); an odd registrant card threw away the domain age; a dormant
+  approved vendor never raised a monitoring alert; the correct CIN on the form could put a vendor on hold; a
+  privacy-service registrant counted as "registered to someone else"; directors were reported as screened when
+  the news search had timed out; a CIN year in the future was accepted.
+
 ## Declared before 10:15
 
 TODO before submitting: list anything written before 10:15 (code, prompts, notes), or write "Nothing".
