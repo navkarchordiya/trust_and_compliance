@@ -134,7 +134,7 @@ def render_text(r: dict) -> str:
 
 
 def cost_summary(store: Store, cfg: dict) -> str:
-    """Measured cost per job across every run in this database: what the finance judge asks for."""
+    """Measured cost per job across every run in this database (the unit cost in the business case)."""
     rate = cfg.get("cost", {}).get("inr_per_credit", 0)
     rows = store.db.execute(
         "SELECT j.id, j.verdict, j.started_at, j.updated_at, COALESCE(SUM(c.credits), 0) AS credits, "

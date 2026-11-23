@@ -1,5 +1,5 @@
-"""The 8 test cases on REAL Crustdata answers recorded on 22 Nov 2026 (see scripts/replay_live.py).
-The bar is the brief's: no wrong answers. Unrecorded requests become "cannot verify", never wrong."""
+"""The test cases in tests/cases.json, run on REAL Crustdata answers recorded on 22 Nov 2026 (see scripts/replay_live.py).
+The bar: no wrong answers. Unrecorded requests become "cannot verify", never wrong."""
 import sys
 import unittest
 from pathlib import Path

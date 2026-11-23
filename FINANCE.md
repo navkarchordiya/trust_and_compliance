@@ -1,8 +1,8 @@
-# Financial feasibility
+# Business case
 
 ## Who pays today, and what they pay
 
-The client is a mid-size Indian 3PL that onboards carriers, warehouse operators and suppliers
+The target customer is a mid-size Indian third-party logistics (3PL) company that onboards carriers, warehouse operators and suppliers
 continuously. Before money moves, someone must decide whether each new vendor is real. Today that is
 bought in one of three ways:
 

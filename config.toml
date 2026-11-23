@@ -1,4 +1,4 @@
-# Every rule, limit and output field lives here, so a requirement change
+# Every rule, limit and output field lives here, so changing a rule
 # is a config edit, not a code change.
 
 [crustdata]

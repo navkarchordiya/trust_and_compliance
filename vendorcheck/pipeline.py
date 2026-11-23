@@ -1,4 +1,4 @@
-"""The service, as six stages from the organizers' guide:
+"""The service, as six stages:
 
   Take the request -> Plan -> Gather the facts -> Decide -> Act, or hand over -> Show its work
 

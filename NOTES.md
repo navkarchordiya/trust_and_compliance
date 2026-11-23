@@ -1,6 +1,6 @@
-# Build notes
+# Design notes
 
-What we tried, what works, and what comes next. (The guide: "They are the heart of your demo.")
+The approaches we considered, the decisions behind the design, and what testing on real data changed.
 
 ## Approaches we considered
 
@@ -9,175 +9,105 @@ What we tried, what works, and what comes next. (The guide: "They are the heart 
    timeout looks like "no results". Hard to prove "each action happens once".
 2. **Fixed pipeline, rules decide, LLM only reads text** (chosen). Every fact is a field in a
    stored API response or a verbatim passage from a fetched page. The verdict is plain rules in
-   `config.toml`, so it is repeatable and explainable, and a requirement change is a config edit.
+   `config.toml`, so it is repeatable and explainable, and changing a rule is a config edit.
 3. **Registry-first** (MCA / GST portals). The strongest legal source, but the public portals
    sit behind CAPTCHAs, and a front can carry genuine papers anyway, so registry presence alone
    cannot prove a business is trading. Kept as a future source.
 
 ## Decisions
 
-- Four outcomes per call (FOUND / NOT_FOUND / UNAVAILABLE / ERROR), because "a slow source looks
-  like a missing one". Only NOT_FOUND counts as an answer.
-- Never join records on name alone ("records share no common key"): Identify by domain first,
+- Four outcomes per call (FOUND / NOT_FOUND / UNAVAILABLE / ERROR), because a slow source looks
+  like a missing one. Only NOT_FOUND counts as an answer.
+- Never join records on name alone (records share no common key): identify by domain first,
   and flag a name mismatch between the request and the record as a lookalike signal.
 - One weak signal never fails a firm; FRONT_SUSPECTED needs 2 independent strong signals.
   A wrong answer costs more than "cannot verify", and honest firms must pass.
+- Front signals (a fake business) and adverse news (a real but risky business) are kept apart.
+  Adverse news sends a vendor to a person; it never makes a firm a front.
 - Namesakes: an article only counts against a person if it also names the vendor (or its
-  domain). Otherwise it is cleared, with the reason shown.
+  domain). Otherwise it is cleared, with the reason shown, and the clearance is marked weak.
 - Rejecting a vendor is irreversible too, so it waits for a person like clearing does.
 - Domain registration date (RDAP) is an independent clock: a firm "founded 1998" whose website
   appeared last month is a strong signal.
+- "Real" is not enough, the vendor must be *active*: approval needs a dated record from the last
+  180 days (a job posting, or news naming the firm).
+- Sandbox data never decides a real vendor. The GST registry provider is off (`[registry] provider =
+  "none"`) until production keys are set; GSTINs still get the offline check-digit test, and the
+  registry check reads *cannot verify*.
 
-## Log
+## What real data taught us
 
-- 11:40 Repo created, plan locked: theme 5.1 + 5.2, Python stdlib only.
-- 11:55 Pipeline, store, source wrapper, rules, approvals, offline tests (9 passing).
-- 12:10 Checked a real Company Enrich response (delhivery.com) through the Crustdata plugin:
-  - Plain `people` returns ~300 decision makers: **5.5 MB** per call. Nested paths
-    (`people.founders`, `people.cxos`, `headcount.total`, ...) cut it to ~350 KB for the same 2 credits.
-  - Each person is a full profile (`basic_profile.name`, `social_handles...profile_url`) with
-    employment history embedded, so "who runs it" needs no Person Enrich call (saves ~3 credits per vendor).
-  - `employer_company_id` is a list of strings (`["5798"]`); our first version compared integers and
-    would never have confirmed anyone. Fixed, with a regression test on the real (slimmed) response.
-  - CXO lists contain junk self-reported titles ("reus zxz, Ceo" at Delhivery, 0 connections).
-    Real executives had 850+ connections; CXOs below `min_connections = 50` are skipped.
-  - `basic_info.status` ("active") is on the record and is now used as a fact.
-- 12:25 Live hard cases:
-  - Lookalike ("Blue Dart Express" + delhivery.com): HOLD_FOR_REVIEW, name mismatch flagged. Correct.
-  - Shakti Bhog Foods (real company, CMD arrested, ED case) first came back FRONT_SUSPECTED. Wrong.
-    Causes and fixes:
-    - Name-only Identify returns 25 candidates all at confidence 0.6 (incl. "Tyson Foods"), so the
-      score means nothing. Now only candidates with every distinctive word of the name count, and
-      records sharing one website are one business (we take the one with the most staff).
-    - Adverse news counted as a front signal. Now: front signals (fake business) and adverse news
-      (real but risky) are separate. Adverse news sends the vendor to a person; it never makes a front.
-    - Web Fetch returned `success: true` for a CloudFront 403, a bot-check page and a Google redirect
-      page. The old code read those as the article and "cleared" a namesake. Now a block or redirect
-      page, or a page that does not even contain the person's name, is "cannot verify", never a clearance.
-    - News search now uses the distinctive name ("Shakti Bhog", not "Shakti Bhog Food").
-  - Not found yet: a named shell company with a website in news after 1 Sep 2026; GST-fraud reports
-    rarely name the shell firms.
+Every lesson below came from running the service on live Crustdata data for Indian logistics firms
+(recorded on 22 Nov 2026 and replayed as tests: `python scripts/replay_live.py`, 16/16 pass, 0 wrong).
 
-- 12:08 (Vedant) One combined news search for the company and all leaders: live Delhivery run ~95 s → 17 s.
-- 12:30 Hard cases and live checks through the Crustdata MCP connector:
-  - Identify by **name** returns padding: "Delhivery Limited" came back with Delhivery, "Delhivery courier",
-    Reliance, ITC, Britannia ... **all at confidence 0.6**. The old code took row 0, so an unknown vendor
-    would have been matched to a random big firm. Now candidates are ranked by name similarity, and below
-    0.85 the answer is *cannot verify*, never an accusation.
-  - Lookalike bug: a request with an unknown website fell back to name, matched the real firm and would have
-    been **cleared with the real firm's records**. Now a strong "Lookalike" red flag; enrich is skipped.
-  - Identify for an unknown domain returns `matches: []` (handled as NOT_FOUND).
-  - News search results have no date field (`position, title, url, snippet, source`), so article facts
-    carry "record date not stated"; the fetch time is kept as `retrieved_at`.
-  - Delhivery's homepage has no GSTIN and `/contact-us` is a 404 page that still returns `success: true`.
-    So the registry stage reads only the homepage, and a GSTIN can come in the request (`--gstin`).
-  - Adverse terms are whole words in the same sentence as the name ("by default" no longer matches), and
-    victim context ("posing as", "in the name of", "beware of") is not adverse news.
-  - Time limit counted from job creation, so a resume after a long pause skipped every call. Now it counts
-    from when the current process picked the job up.
-  - Identify is free (docs.crustdata.com/general/pricing); `X-Credits-Used` confirmed as the header.
+**The API is not shaped like the docs say.**
+- Plain `people` in Company Enrich returns about 300 decision makers: **5.5 MB** per call. Nested paths
+  (`people.founders`, `people.cxos`, `headcount.total`, ...) cut it to about 350 KB for the same 2 credits.
+- Each person is a full profile with employment history embedded, so "who runs it" needs no Person Enrich
+  call (about 3 credits saved per vendor).
+- `employer_company_id` is a list of strings (`["5798"]`); comparing integers would never have confirmed
+  anyone.
+- Identify is documented as free but charged 0.2 credits per match.
+- News search results carry no date, so article facts say "record date not stated" and keep the fetch time.
 
-- 12:45 Merged with Vedant's live fixes (kept his name grouping, adverse vs front split, block-page detection).
-  Added: client vendor-list import (duplicates by website / GSTIN / name, even with sources down),
-  JSON-lines event log per job, written reason required to overrule the recommendation, retention purge,
-  `costs` (measured mean / p90 per job), `scripts/kill_demo.sh` for the kill-on-stage demo. 37 tests.
+**Identity is the hardest part.**
+- Identify by *name* returns padding: "Delhivery Limited" came back with Reliance, ITC and Britannia, and
+  "Shakti Bhog Foods" with Tyson Foods and McCain, all at confidence 0.6. Candidates are now ranked by name
+  match; a vague name is *cannot verify*, never an accusation.
+- Several records can share one website ("Shakti Bhog", 237 staff, and "Shakti Bhog Food", 3 staff): they are
+  one business, and the main profile is used.
+- "Sharma Trading Co" loosely matched four different firms; calling it a lookalike of one would have been a
+  false accusation. A lookalike now needs near-exact name matches pointing at one firm.
+- A request with an unknown website fell back to the name, matched the real firm and would have been cleared
+  with the real firm's records. It is now a strong "Lookalike" red flag.
+- Brands and rebrands: "XpressBees" is filed as "Xpressbees (BusyBees Logistics Solutions Pvt. Ltd.)"; Gati now
+  lists Allcargo's website first after the merger, which is reported as a likely rebrand, not a lookalike.
+- Ecom Express still shows 13,000 employees, but `ecomexpress.in` is registered to Delhivery Limited, which
+  bought it. It is no longer approved: a person confirms which entity gets paid.
 
-- 13:10 Review app (`serve`): evidence file, raw response behind each API fact, ledger, approvals; resumes
-  unfinished checks on start. Enrich requests `metadata` (refresh date as record date when Crustdata fills it;
-  null for Delhivery today). FINANCE.md with sourced ₹ benchmarks. `rescreen` for monitoring: carries the
-  profile over, re-runs news + GST (~1–2 credits), alerts once. `eval` accepts `!REAL_AND_TRADING`: news about
-  shell firms after 1 Sep 2026 rarely names one with a website, so for fronts the property we test is
-  "never approved". 40 tests.
+**Who runs it.**
+- CXO lists contain junk self-reported titles ("reus zxz, Ceo" at Delhivery with 0 connections; Blue Dart's
+  only "founder" also has 0). Founders need ≥10 connections and CXOs ≥50 before anyone is reported as running
+  the firm, and only leadership titles count.
+- Directors named on a vendor's form are screened in the news but not looked up by name: a name search
+  returned strangers.
 
-- 13:40 **Live eval on real Crustdata data: 8/8 pass, 0 wrong answers** (`python scripts/replay_live.py`;
-  23 real answers recorded through the Crustdata connector, now a regression test). What the real data broke:
-  - "Sharma Trading Co" + unknown website loosely matched four different "Sharma ... Trading" firms; we called it
-    a **lookalike** of one (a false accusation). Now a lookalike needs near-exact name matches pointing at ONE firm.
-  - "RK Enterprises" by name = 10+ different firms: we paid to enrich a random one and dated its website. Now an
-    ambiguous name skips enrich, news and domain age (0 credits) and goes to a person.
-  - Blue Dart's only "founder" is a self-declared profile with **0 connections**; three "CEO"s have 1. Founders
-    now need ≥10 connections, CXOs ≥50, before anyone is reported as running the company.
-  - Most "Blue Dart" fraud news is scams **in its name**, often in Hindi ("के नाम पर" = "in the name of"). Victim
-    markers expanded (English + Hindi); Hindi adverse words added for mixed headlines (Shakti Bhog "CMD अरेस्ट").
-  - `https://delhivery.com` fails (certificate) while `www.` works; Shakti Bhog serves a 403 bot-check page.
-    Homepage read now tries `www.` first and treats block pages as unreadable, never as "no GSTIN".
-  - Same name + different website was stopped as a "duplicate" (skipping the lookalike's checks). Now flagged
-    and the check continues; a name match only counts as a duplicate when nothing else tells them apart.
-  - A website with no DNS record is reported (weak signal).
+**Adverse news.**
+- Shakti Bhog Foods (a real firm whose CMD was arrested) first came back FRONT_SUSPECTED. The fixes: the
+  identity fix above, keeping adverse news apart from front signals, and searching the distinctive name
+  ("Shakti Bhog", not "Shakti Bhog Food"). It is now held for review with both articles cited.
+- Most "Blue Dart" fraud news is about scams *in its name*, often in Hindi ("के नाम पर", "in the name of").
+  Victim phrases are not adverse news; Hindi adverse words are matched in mixed headlines.
+- Words like "FIR" or "raid" appear when the vendor is the victim (Xpressbees), so they need a second adverse
+  word about the vendor.
+- Web Fetch returned `success: true` for a CloudFront 403, a bot-check page and a Google redirect page. Such a
+  page, or one that does not even contain the person's name, is *cannot verify*, never a clearance.
+- Reports on GST-fraud rings rarely name the shell firms, so for fronts the tested property is "never
+  approved".
 
-- 13:45 Independent code review (a fresh reviewer with no context) found 15 defects, 6 of which could give a
-  wrong verdict; all fixed with regression tests (`tests/test_review_fixes.py`, 57 tests):
-  rejecting a lookalike wrote the real firm into the register; crime words ("cyber fraud") were treated as
-  victim markers; a leader's article naming the short brand was cleared; name-only and "record does not list
-  this website" identities could be approved; "real and trading" needed only a confirmed leader; "N/A" or free
-  text produced lookalike accusations; odd response shapes crashed a stage forever; a call killed in flight was
-  not in the ledger; two racing approvals both acted; a kill after hand-over could leave a job open; decline
-  was not atomic; some flags had no cited field; the review app had no CSRF/Host check.
+**Speed and cost.**
+- One combined news search for the company and all its leaders cut a live check from about 95 s to 17 s.
+- Job Search rate-limits bursts (429, retry after 50 s); the client waits for the rate-limit header.
+- `https://delhivery.com` fails on its certificate while `www.` works: the homepage read tries `www.` first.
 
-- 14:30 **Real-data set doubled: 16/16 pass, 0 wrong answers** (57 real answers recorded). What the new real
-  data broke:
-  - Gati Limited now lists Allcargo's website first (merger). A requested website that is only a SECONDARY
-    domain of the record is reported as a likely rebrand (weak), not as a lookalike.
-  - "XpressBees" is filed as "Xpressbees (BusyBees Logistics Solutions Pvt. Ltd.)": names are now compared on
-    brand and legal-name variants, and the news query uses the brand without the bracket.
-  - Xpressbees appears in an FIR story as the **victim**; "FIR" and "raid" alone no longer link an article
-    (`ambiguous_terms`): they need a second adverse word about the vendor.
-  - "Xpressbees Logistics" on a website that does not exist: the name carries the whole brand of one known firm
-    with its own website, so it is now called a **lookalike** (was only "name unconfirmed").
-  - TCI Express's "CXO" list has a person whose job there is "Senior Territory Manager" under a "Chief ..."
-    headline: only leadership titles are reported as running the firm; others are listed as working there.
-  - Storefront pages (business.site, IndiaMART, Facebook) are never treated as a company's own website.
-  - An expired TLS certificate on the vendor's site is a weak signal, never a verdict on its own.
-  - Identify is documented as free but charged 0.2 credits per match: cost estimates updated (FINANCE.md).
+## Independent reviews
 
-- 14:05 **"Real and ACTIVE"** (the brief's own words). A headcount and an "active" flag can be years old, so
-  approval now needs a dated record from the last 180 days: the vendor's newest job postings (Crustdata Job
-  Search, 0.03 credits per listing) or a news item on its record whose title names the firm. Real data:
-  Delhivery's newest posting is 5 days old, Rivigo's is from Sep 2022, Ecom Express's from Jul 2024. The newest
-  news item on Ecom Express's record is about Delhivery, so news counts only if it names the vendor.
-  - RDAP read live (through Crustdata Web Fetch, since rdap.org is blocked from the build box; this is also
-    now the automatic fallback when rdap.org fails). `.in` records name the registrant organisation:
-    tciexpress.in → TCI EXPRESS LIMITED, shadowfax.in → Shadowfax Technologies Private Limited, and
-    **ecomexpress.in → Delhivery Limited** (Delhivery completed buying 99.87% of Ecom Express in Jul 2025,
-    per its NSE filing). That case was labelled "real and trading" before; it is now "not approved".
-  - CIN (company registration number) read from the vendor's homepage or form and decoded: year of
-    incorporation, state, listed or not, company type. Recent incorporation and a form/website mismatch are
-    flagged. Registry mirrors that list MCA status and directors (Zauba, Tofler) block automated reads, so
-    the MCA register itself is still "cannot verify" and named in the output.
-  - Directors named on the vendor's form are screened in the news with the leaders (same namesake rules).
-  - A domain the registry says is "available for registration" is reported once, as a fact from RDAP.
-  - Job Search rate-limits bursts (429, retry after 50 s; seen while recording): the client already waits
-    for the rate-limit header.
+Two code reviews by a fresh reviewer with no context found 26 defects (each reproduced first); all are fixed
+with regression tests. The ones that could have given a wrong verdict or a wrong action:
+- rejecting a lookalike wrote the real firm into the vendor register;
+- crime words ("cyber fraud") were treated as signs the vendor was the victim;
+- name-only identities could be approved, and "real and trading" needed only one confirmed leader;
+- two approvals at the same moment could both act, and a decline was not atomic;
+- a call killed in flight was missing from the cost ledger;
+- a job-posting date in another format crashed the decision and left the job stuck;
+- a posting without a title approved a vendor with no cited fact;
+- the review app had no CSRF or Host check.
 
-- 14:25 Two weak signals on a known firm now go to a person (`[verdict] weak_signals_for_review`), not
-  "cannot verify": Ecom Express's result now leads with "website registered to Delhivery Limited" instead of
-  "GST page unreadable". Directors and a GSTIN/CIN are read from plain-words requests too. Tried confirming
-  directors through Crustdata Person Search: TCI Express's MD is not in the dataset under TCI, and a name
-  search returns strangers (a clerk, two GMs elsewhere), so we do not do it; such directors are "form only".
-  Homepages of VRL, Om Logistics and Mahindra Logistics carry no CIN in their visible text, so the CIN is
-  mostly expected from the vendor's form. Real-data outputs: `docs/real_tci_express.txt`, `docs/real_ecom_express.txt`.
+## Known limits and next steps
 
-- 14:45 Second independent review of the new checks (fresh reviewer, every defect reproduced with a script
-  first): 11 found, all fixed, 7 regression tests (83 tests). Worst ones: a job-posting date in another format
-  crashed the decision and left the job stuck; when both RDAP routes failed, a code slip turned it into a stage
-  error that blocked every approval; a posting without a title approved a vendor with no cited fact (the
-  posting DATE is now the cited fact); facts read through the RDAP fallback pointed at a field that is not in
-  the stored response (now the verbatim passage); an odd registrant card threw away the domain age; a dormant
-  approved vendor never raised a monitoring alert; the correct CIN on the form could put a vendor on hold; a
-  privacy-service registrant counted as "registered to someone else"; directors were reported as screened when
-  the news search had timed out; a CIN year in the future was accepted.
-
-## Declared before 10:15
-
-TODO before submitting: list anything written before 10:15 (code, prompts, notes), or write "Nothing".
-- GST registry provider switched off (`[registry] provider = "none"`): the configured Cashfree URL
-  is the sandbox, whose canned answers could become strong red flags on real vendors. GSTINs still
-  get the offline check-digit test; the registry check is "cannot verify" until production keys exist.
-
-## Next
-
-- Run on real vendors with the Crustdata key in `.env`.
-- Gather real test cases dated after 1 Sep 2026 (see `tests/cases.md`).
-- LLM step to read articles: extract the person's employer/city/role so namesakes are cleared on
-  positive evidence, not just absence of the vendor's name.
-- Registry source for incorporation date and directors (MCA via a KYC API sandbox).
+- **GST registry:** needs production provider keys; until then it is *cannot verify*.
+- **MCA register:** status and directors are not read directly (mirrors block automated reads); the CIN is
+  decoded offline for incorporation year, state and company type.
+- **Namesakes:** clearance is based on the vendor's name being absent from the article. An LLM step that
+  extracts the person's employer, city and role would clear namesakes on positive evidence instead.
+- **Scale:** see [ARCHITECTURE.md](ARCHITECTURE.md) for moving from SQLite to a queue with workers.

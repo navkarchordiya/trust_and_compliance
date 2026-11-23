@@ -1,28 +1,30 @@
-# Demo and finals playbook
+# Walkthrough
 
-## 2-minute demo video (record by 5:30 PM)
+A guided tour of Vendor Check: what to run, what to look at, and where things live in the code.
 
-| Time | Show | Say |
+## A two-minute tour
+
+| Step | Run / open | What to look at |
 |---|---|---|
-| 0:00–0:15 | README top | "Compliance teams are paid to decide whom to trust before money moves. Vendor Check does that whole job: a new vendor in, a sourced verdict out, and a person approves." |
-| 0:15–0:50 | `python -m vendorcheck serve`, start a check on a real vendor | Verdict, the reasons, who runs it (confirmed on their own profile), how long it has existed, every fact with its field, record date and retrieval time. Click "stored response" on one fact. |
-| 0:50–1:10 | A lookalike, then Ecom Express (`docs/real_ecom_express.txt`) | "Lookalike: the name belongs to a firm on another domain; we never borrow its records. And 'real' is not enough, it must be *active*: Ecom Express still has 13,000 employees on record, but its website is registered to Delhivery, which bought it, and its newest job is from 2024. Held for a person." |
-| 1:10–1:30 | `./scripts/kill_demo.sh` | Killed mid-run with `kill -9`, resumed, ledger shows no call paid twice, approve twice: done once. |
-| 1:30–1:50 | Cost card + `python -m vendorcheck costs` | "3–8 credits per check, a duplicate costs 0.2. We charge ₹499; an outsourced check is about ₹2,150 and takes days." |
-| 1:50–2:00 | Approval form | "Nothing irreversible without a named person; overruling needs a written reason." |
+| 1 | `python -m vendorcheck serve`, start a check on a real vendor | The verdict and its reasons, who runs it (confirmed on their own profile), how long it has existed, and every fact with its field, record date and retrieval time. Open "stored response" on one fact. |
+| 2 | A lookalike, then Ecom Express (`docs/real_ecom_express.txt`) | A lookalike borrows a real firm's name on another domain; its records are never used. "Real" is not enough, it must be *active*: Ecom Express still has 13,000 employees on record, but its website is registered to Delhivery, which bought it, and its newest job posting is from 2024. Held for a person. |
+| 3 | `./scripts/kill_demo.sh` | The run is killed mid-way with `kill -9` and resumed; the ledger shows no call paid twice; approving twice acts once. |
+| 4 | `python -m vendorcheck costs` | Measured cost per check: 3–8 credits, 0.2 for a duplicate. |
+| 5 | The approval form | Nothing irreversible happens without a named person; overruling the recommendation needs a written reason. |
 
-## Finals: 3-minute live run (includes the kill)
+## Kill and resume
 
-1. `python -m vendorcheck serve` on a fresh database: `python -m vendorcheck --db data/finals.db serve`.
-2. Paste the unseen request into the form (name, website, GSTIN if given). If it is a list, use
-   `python -m vendorcheck --db data/finals.db batch request.json`.
-3. When the judge says "kill": `Ctrl+C` or `kill -9` the server. Start it again with the same command: it
-   prints "resuming 1 unfinished check" and carries on. Open the cost ledger: completed calls show once.
-4. Approve. Press Approve again: "already approved … nothing done again". Show `outbox`.
+1. Start the review app on a fresh database: `python -m vendorcheck --db data/demo.db serve`.
+2. Start a check from the form (name, website, GSTIN if known), or a list with
+   `python -m vendorcheck --db data/demo.db batch requests.json`.
+3. Stop the server at any moment (`Ctrl+C` or `kill -9`) and start it again with the same command: it prints
+   "resuming 1 unfinished check" and carries on. In the cost ledger, completed calls appear once.
+4. Approve. Approve again: "already approved … nothing done again". `python -m vendorcheck outbox` shows each
+   internal notification once.
 
-## Live fix (5 minutes): where things are
+## Where to change things
 
-| Likely change request | Where | How long |
+| Change | Where | Effort |
 |---|---|---|
 | New output field / remove a field | `config.toml` `[output] fields`, value in `rules.py` `answer` | 1–2 min |
 | Lower cost or time limit | `config.toml` `[limits]` (news search is kept first under a tight budget) | 30 s |
@@ -34,9 +36,9 @@
 | Weak signals that send a firm to a person | `config.toml` `[verdict] weak_signals_for_review` | 30 s |
 | New request field (e.g. PAN) | `pipeline.s_take_request` (copy the `cin` lines), `__main__.py` flag, `web.py` form | 3 min |
 
-Run `python -m unittest discover -s tests` after the change (about 2 s).
+Run `python -m unittest discover -s tests` after a change.
 
-## System design questions
+## Design questions
 
 **100× the volume.** Each job is already the unit of work, checkpointed after every stage. Put job IDs on a
 queue and run N workers (the code has no shared in-memory state). Swap SQLite for Postgres
@@ -53,7 +55,7 @@ never shared across clients; only the public-data cache (by Crustdata company ID
 looks like "no results". Here every fact is a stored field or a verbatim passage, the verdict is plain rules,
 and the same inputs give the same answer, so it can be audited and tested.
 
-## Ethics questions (25 points)
+## Ethics
 
 - *Personal data:* only founders and up to 3 senior leaders, from public professional profiles, and only their
   current employer and title, plus directors the vendor itself names on its form (used only for the news
@@ -65,8 +67,8 @@ and the same inputs give the same answer, so it can be audited and tested.
 - *Explaining decisions:* every verdict lists its reasons by type, and every fact links to the field or passage.
 - *Contestability:* the vendor can be re-checked (`rescreen`) and a person can overrule with a recorded reason.
 
-## Finance questions (25 points)
+## Business case
 
-See [FINANCE.md](FINANCE.md). One line: "₹499 per decision with an evidence file, in about a minute, against
-~₹2,150 and days for an outsourced check; our measured cost is 4–8 credits plus at most ₹5 for the GST lookup;
-*cannot verify* is free, so the client never pays for a guess; monitoring at ₹49 per vendor per month."
+See [FINANCE.md](FINANCE.md). In one line: ₹499 per decision with an evidence file, in about a minute, against
+about ₹2,150 and several days for an outsourced check; the measured cost is 4–8 data credits plus at most ₹5 for
+a GST lookup; *cannot verify* is free, so nobody pays for a guess; monitoring is ₹49 per vendor per month.

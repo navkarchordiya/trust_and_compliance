@@ -6,7 +6,7 @@ Verdicts
   HOLD_FOR_REVIEW   one strong red flag, an adverse-media link, a duplicate, or an ambiguous identity
   CANNOT_VERIFY     a key question has no source (missing record, timeout, budget); names what is missing
 
-Rule of thumb from the brief: a wrong answer costs more than "cannot verify", and honest firms
+Rule of thumb: a wrong answer costs more than "cannot verify", and honest firms
 and innocent namesakes must pass. So one weak signal never fails a firm, and a source that
 did not answer is never read as "does not exist".
 """

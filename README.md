@@ -1,22 +1,42 @@
-# Vendor Check — Trust and compliance (ContextCon 05)
+# Vendor Check
 
-An agent that does the whole job of a vendor verification firm: given a new vendor's name and
-website, it decides whether the vendor is a **real, trading business**, says **who runs it**,
-**how long it has existed** and **anything that looks off**, then screens the people who run it
-against the news and **clears innocent namesakes** (themes 5.1 Vendor Check + 5.2 Adverse Media Screen).
+**Automated vendor due diligence.** Give it a new vendor's name and website; it decides whether the
+business is **real and actively trading**, says **who runs it** and **how long it has existed**, screens
+those people against the news (clearing innocent namesakes), and lists **anything that looks off**.
+Every fact links to the exact API field or page passage it came from, and **a person approves** every
+irreversible step.
 
-**Quick look:** real-data results for [TCI Express](docs/real_tci_express.txt) (approved) and [Ecom Express](docs/real_ecom_express.txt) (held: website registered to Delhivery, its buyer) · [sample output](docs/sample_output.txt) (mock data) · [review app](#review-app-the-compliance-teams-screen) ·
-[finance](FINANCE.md) · [demo playbook](DEMO.md) · [architecture](ARCHITECTURE.md) · [build notes](NOTES.md)
+![Evidence file for a real company held for review](docs/screens/shakti_bhog_hold.png)
 
-## The job, and who pays for it today
+- **Sourced, not guessed.** Facts are stored API fields or verbatim passages, never model memory. When a
+  source cannot settle a question, the answer is *cannot verify*, with what is missing.
+- **Safe to kill.** Every stage is checkpointed in SQLite: a run killed at any moment resumes where it
+  stopped, never pays twice for a call, and every approval acts exactly once.
+- **Measured on real data.** 16/16 real Indian logistics companies classified correctly (0 wrong
+  answers), about 17 s and 3–8 data credits per check. 83 tests. Python standard library only.
+
+**More:** real results for [TCI Express](docs/real_tci_express.txt) (approved) and [Ecom Express](docs/real_ecom_express.txt) (held: its website is registered to Delhivery, its buyer) · [sample output](docs/sample_output.txt) (mock data) · [review app](#review-app-the-compliance-teams-screen) ·
+[business case](FINANCE.md) · [walkthrough](WALKTHROUGH.md) · [architecture](ARCHITECTURE.md) · [design notes](NOTES.md)
+
+## Quickstart
+
+```bash
+git clone https://github.com/navkarchordiya/trust_and_compliance.git && cd trust_and_compliance
+cp .env.example .env                      # add your CRUSTDATA_API_KEY
+python -m vendorcheck run --name "TCI Express Limited" --website tciexpress.in
+python -m vendorcheck serve               # review app on http://127.0.0.1:8765
+python -m unittest discover -s tests      # offline tests, no key needed
+```
+
+## The problem
 
 Before money moves to a new vendor, a compliance team or an outside verification and screening
-firm checks that the business is who it says it is. Our client, a mid-size Indian 3PL, onboards
-carriers, warehouse operators and suppliers every week and pays for each check. A front company
+firm checks that the business is who it says it is. A mid-size Indian third-party logistics (3PL)
+company onboards carriers, warehouse operators and suppliers every week and pays for each check. A front company
 can carry genuine papers, records share no common key, and a slow source looks like a missing
 one, so the check is slow, manual and error-prone.
 
-## Input
+## Usage
 
 ```bash
 python -m vendorcheck run --name "Acme Freight Pvt Ltd" --website acmefreight.in
@@ -29,7 +49,7 @@ python -m vendorcheck eval tests/cases.json   # batch + pass / safe miss / wrong
                                               # ("!REAL_AND_TRADING" = a front must never be approved)
 ```
 
-## Finished result
+## Output
 
 One verdict, with every fact linked to its source: the exact field or verbatim passage, the record's own
 date where the source gives one (article date, domain registration, GST registration), and when it was retrieved:
@@ -47,7 +67,7 @@ date and who the domain is registered to, **the newest dated sign of activity** 
 evidence, red flags, namesakes cleared, what could not be verified, every fact with its source, and the
 cost of the run.
 
-## Pass mark
+## Guarantees
 
 - Honest firms and innocent namesakes pass; fronts are caught **with evidence**.
 - Every claim has a source; no fact comes from model memory.
@@ -67,7 +87,7 @@ cost of the run.
 | Crustdata `POST /web/search/live` (news, IN) | Adverse news: ONE combined search for the company and its leaders (English and Hindi terms) | 1 credit |
 | Crustdata `POST /web/enrich/live` | Read an article that names a leader, to link or clear a namesake; the passage is stored | 1 credit per article (max 4) |
 | Crustdata `POST /web/enrich/live` (vendor homepage) | GSTIN printed on the vendor's own website, kept as a verbatim passage | 1 credit |
-| GST registry via Cashfree Secure ID (`/verification/gstin`, optional) | GST status, legal and trade name, registration date for the GSTIN | per provider plan |
+| GST registry via Cashfree Secure ID (`/verification/gstin`, optional; off by default until production keys are set) | GST status, legal and trade name, registration date for the GSTIN | per provider plan |
 | Crustdata `POST /job/search` | **Is it active now**: the vendor's newest job postings, each with the date it was added | 0.03 credits per listing (3 listings) |
 | CIN on the vendor's homepage or form (decoded offline) | Year of incorporation, state, listed or not, company type, from the MCA identifier itself | free (same homepage read) |
 | RDAP (`rdap.org`) | Domain registration date and, where the registry shows it, the organisation the domain is registered to | free |
@@ -96,7 +116,7 @@ sources, so a re-screen costs about 1–2 credits instead of 3–8. No change: t
 else (new adverse news, cancelled GST) goes to a person with an alert in the outbox, exactly once; the
 person can reject the vendor, which updates the register.
 
-## Hard cases (from the brief) and how each is handled
+## Hard cases and how each is handled
 
 | Case | What the service does | Test |
 |---|---|---|
@@ -127,7 +147,7 @@ Allcargo, Rivigo after its sale), a firm whose CMD was arrested (Shakti Bhog), t
 duplicate, a free-text request, an unknown vendor and an ambiguous shell-firm name. The recordings include
 each firm's newest job postings and its RDAP record. It is part of the test suite.
 
-A wrong answer counts against us more than *cannot verify*, so every rule falls back to
+A wrong answer is worse than *cannot verify*, so every rule falls back to
 *cannot verify* or *hold* when the evidence is incomplete.
 
 ## Approvals (human in the loop)
@@ -139,7 +159,7 @@ python -m vendorcheck approve JOB --by "Your Name" --action reject_vendor
 python -m vendorcheck decline JOB --by "Your Name"
 ```
 
-Agents stay in the room: notifications go to an internal `outbox` table for the team, never to
+Nothing leaves the team: notifications go to an internal `outbox` table, never to
 the vendor or anyone outside. Only people in `[approvals] approvers` may decide (when set); two people
 deciding at once cannot both act; the review app refuses forms that did not come from itself.
 
@@ -165,12 +185,12 @@ deciding at once cannot both act; the review app refuses forms that did not come
 - **A dormant or sold firm is not called active.** Approval needs a dated record from the last 180 days;
   a firm bought by a rival (website registered to the buyer) goes to a person, so a payment does not go to
   an entity that no longer trades on its own.
-- **Agents stay in the room.** No email or message goes to the vendor or anyone outside. Notifications go
-  to an internal outbox for the client's team.
+- **Nothing is sent outside.** No email or message goes to the vendor or anyone outside. Notifications go
+  to an internal outbox for the compliance team.
 - **Uncertainty is stated, not guessed.** If a source times out or has no record, the result says
   *cannot verify* and names what is missing.
 
-## Financial feasibility
+## Business case
 
 See [FINANCE.md](FINANCE.md): who pays today (₹69–₹1,500 data reports, ~₹2,150 outsourced checks,
 30–60 analyst minutes per vendor, with sources), our price (**₹499 per vendor check**, *cannot verify*
@@ -198,8 +218,8 @@ python -m vendorcheck import-vendors client_vendors.csv   # columns: name, websi
 A request for a vendor already on the client's list is held as a duplicate, matched on website, GSTIN
 or normalised name, even when the outside sources are down.
 
-Every result is also written to `data/results/JOB.json`. For screening, use a fresh database
-(`--db data/screening.db`) so test runs from the build are not reported as duplicates.
+Every result is also written to `data/results/JOB.json`. For a clean evaluation, use a fresh database
+(`--db data/eval.db`) so earlier runs are not reported as duplicates.
 
 ## Setup
 
@@ -211,4 +231,12 @@ python -m unittest discover -s tests -v
 Python 3.11+, standard library only.
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for the components and data flow, and
-[NOTES.md](NOTES.md) for the approaches we considered and what we learned.
+[NOTES.md](NOTES.md) for the approaches we considered and what real data taught us.
+
+## Authors
+
+Built by [Vedant Kabra](https://github.com/VedantK2010) and [Navkar Chordiya](https://github.com/navkarchordiya).
+
+## License
+
+[MIT](LICENSE)

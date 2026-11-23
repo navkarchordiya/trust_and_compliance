@@ -80,7 +80,7 @@ CREATE TABLE IF NOT EXISTS vendor_register (
     job_id TEXT NOT NULL,
     decided_at TEXT NOT NULL
 );
--- Internal notifications only: agents stay in the room.
+-- Internal notifications only: nothing is sent to the vendor or anyone outside.
 CREATE TABLE IF NOT EXISTS outbox (
     idempotency_key TEXT PRIMARY KEY,
     to_team TEXT NOT NULL,
@@ -216,7 +216,7 @@ class Store:
         self.db.execute("INSERT OR REPLACE INTO vendor_register (company_key, name, domain, decision, job_id, "
                         "decided_at) VALUES (?,?,?,?,?,?)", (key, name, domain, decision, job_id, now_iso()))
 
-    # ---- event log (for screening: what happened, when, in which order) ----
+    # ---- event log (for audits: what happened, when, in which order) ----
     def log_event(self, job_id: str, event: str, **fields) -> None:
         try:
             self.log_dir.mkdir(parents=True, exist_ok=True)

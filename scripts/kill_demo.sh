@@ -28,6 +28,6 @@ echo "== resume"
 echo "== ledger: each call once, completed calls not paid again"
 "$PY" -m vendorcheck --db "$DB" ledger "$JOB"
 echo "== approve twice: the action happens exactly once"
-"$PY" -m vendorcheck --db "$DB" approve "$JOB" --by "Judge" --action "$(sqlite3 "$DB" "SELECT CASE recommended_action WHEN 'manual_review' THEN 'add_to_approved_vendors' ELSE recommended_action END FROM approvals WHERE job_id='$JOB'" 2>/dev/null || echo add_to_approved_vendors)" --reason "demo" || true
-"$PY" -m vendorcheck --db "$DB" approve "$JOB" --by "Judge" || true
+"$PY" -m vendorcheck --db "$DB" approve "$JOB" --by "Demo Approver" --action "$(sqlite3 "$DB" "SELECT CASE recommended_action WHEN 'manual_review' THEN 'add_to_approved_vendors' ELSE recommended_action END FROM approvals WHERE job_id='$JOB'" 2>/dev/null || echo add_to_approved_vendors)" --reason "demo" || true
+"$PY" -m vendorcheck --db "$DB" approve "$JOB" --by "Demo Approver" || true
 "$PY" -m vendorcheck --db "$DB" outbox

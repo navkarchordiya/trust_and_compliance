@@ -1,4 +1,4 @@
-"""Hard cases from the brief: lookalike names, duplicates, adverse-term false positives, the
+"""Hard cases: lookalike names, duplicates, adverse-term false positives, the
 GST registry, and resuming after a long pause. Mock data is for tests only."""
 import json
 import os
